@@ -20,7 +20,7 @@ int trySetGrammar(Parser *parser, char *grammar_file) {
 		return 1;
 	}
 
-	int ret = initGrammarRuleArray(&parser->grammar, grammar_file, &parser->p);
+	int ret = initGrammarRuleArray(&parser->grammar, grammar_file, &parser->p); // rule array itself is in parser's arena
 	if(ret != 0) {
 		return 2;
 	}
