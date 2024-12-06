@@ -42,9 +42,13 @@ int main(void) {
 		goto error;
 	}
 
+
+	termMemPool(&scratch);
+	termParser(&parser);
 	return 0;
 
 error:
+	termMemPool(&scratch);
 	termParser(&parser);
 	return 1;
 }
