@@ -19,10 +19,34 @@
 #define INPUT_BUFFER_SIZE 512
 
 int main(void) {
+
+	char *grammar_file = "./resources/grammar.txt";
+	char *test_script = "./resources/script.tl";
+
+	MemPool scratch;
+	initMemPool(&scratch); // scratch arena for source file contents
+
 	Parser parser;
-	
+	initParser(&parser);
+
+	char *source = pReadFile(test_script, &scratch);
+	if(!source) {
+		goto error;
+	}
+
+	if(0 != trySetGrammar(&parser, grammar_file)) {
+		goto error;
+	}
+
+	if (0 != tryScanTokens(&parser, source)) {
+		goto error;
+	}
 
 	return 0;
+
+error:
+	termParser(&parser);
+	return 1;
 }
 
 int main3(void) {

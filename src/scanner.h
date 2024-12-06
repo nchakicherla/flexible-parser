@@ -60,6 +60,8 @@ char *tokenLabelLookup(TOKEN_TYPE type);
 
 //TOKEN_TYPE tokenTypeValFromNChars(char* str, size_t n);
 
+size_t countTokens(char *source, bool *had_error);
+
 void __printToken(Token *token);
 
 #endif // SCANNER_H

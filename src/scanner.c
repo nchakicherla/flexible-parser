@@ -359,6 +359,26 @@ char *tokenLabelLookup(TOKEN_TYPE type) {
 	return __tokenNameLiterals[type];
 }
 
+size_t countTokens(char *source, bool *had_error) {
+	initScanner(source);
+
+	size_t n_tok = 0;
+	*had_error = false;
+
+	while(true) {
+		Token token = scanToken();
+		n_tok++;
+		if (token.type == TK_ERROR) {
+			*had_error = true;
+			break;
+		}
+		if (token.type == TK_EOF) {
+			break;
+		}
+	}
+	return n_tok;
+}
+
 void __printToken(Token *token) {
 	printf("LINE: %6zu TYPE: %16s - \"%.*s\"\n", 
 		token->line,

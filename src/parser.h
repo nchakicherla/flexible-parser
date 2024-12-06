@@ -8,14 +8,22 @@
 #include "syntax_node.h"
 
 typedef struct s_Parser {
-	MemPool p;
 	GrammarRuleArray grammar;
-	char *source;
+	//char *source;
 	Token *tokens;
 	TokenStream tk_stream;
 	SyntaxNode *head;
+	MemPool p;
 } Parser;
 
 void initParser(Parser *parser);
+
+void termParser(Parser *parser);
+
+int trySetGrammar(Parser *parser, char *grammar_file);
+
+//int tryReadSource(Parser *parser, char *source);
+
+int tryScanTokens(Parser *parser, char *source);
 
 #endif // PARSER_H
