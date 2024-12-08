@@ -69,7 +69,7 @@ void initRuleNode(RuleNode *node) {
 
 size_t getSemicolonOffsetFromRuleStart(Token *tokens) {
 	size_t ret = 0;
-	while(tokens[ret].type != TK_SEMICOLON) {
+	while(tokens[ret].type != TK_SEMICOLON && tokens[ret].type != TK_EOF) {
 		ret++;
 	}
 	return ret;
@@ -344,10 +344,15 @@ int tryInitGrammarRuleArray(GrammarRuleArray *rule_array, char *fileName, MemPoo
 		rule_array->rules[i].head = palloc(pool, sizeof(RuleNode));
 
 		size_t ruleStart = getRuleStartIndex((SYNTAX_TYPE)i, tokens, n_tokens);
+		if(ruleStart == 0) {
+			printf("valid rule start for i = %zu not found\n", i);
+			return 2;
+		}
+
 		size_t semiOffset = getSemicolonOffsetFromRuleStart(&tokens[ruleStart]);
 		if(tokens[ruleStart].line != tokens[ruleStart + semiOffset].line) {
 			printf("rule start and semicolon not on same line...\n");
-			return 2;
+			return 3;
 		}
 		//printf("rule start line: %zu\n", tokens[ruleStart].line);
 		//printf("semi line: %zu\n", tokens[ruleStart + semiOffset].line);
