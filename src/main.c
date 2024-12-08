@@ -26,7 +26,7 @@ int main(void) {
 	MemPool scratch;
 	initMemPool(&scratch); // scratch arena for source file contents
 
-	Parser parser = { 0 };
+	Parser parser = {0};
 	initParser(&parser);
 
 	char *source = tryReadFile(test_script, &scratch);
@@ -43,8 +43,8 @@ int main(void) {
 		goto error;
 	}
 
-	// try parsing based on a rule in GrammarRuleArray in Parser, or brute-force and check all
-	// parsing fails 
+	// try parsing based on a rule in GrammarRuleArray in Parser, or brute-force and check all rules
+	// parsing fails by returning NULL from parseGrammar in ast.c
 
 	termMemPool(&scratch);
 	termParser(&parser);
