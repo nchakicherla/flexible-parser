@@ -10,20 +10,18 @@
 typedef struct s_Parser {
 	GrammarRuleArray grammar;
 	//char *source;
+	size_t n_tokens;
 	Token *tokens;
 	TokenStream tk_stream;
 	SyntaxNode *head;
 	MemPool p;
+	bool is_initialized;
 } Parser;
 
 void initParser(Parser *parser);
-
 void termParser(Parser *parser);
-
 int trySetGrammar(Parser *parser, char *grammar_file);
-
 //int tryReadSource(Parser *parser, char *source);
-
 int tryScanTokens(Parser *parser, char *source);
 
 #endif // PARSER_H

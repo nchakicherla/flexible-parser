@@ -26,23 +26,19 @@ int main(void) {
 	MemPool scratch;
 	initMemPool(&scratch); // scratch arena for source file contents
 
-	Parser parser;
+	Parser parser = { 0 };
 	initParser(&parser);
 
-	char *source = pReadFile(test_script, &scratch);
+	char *source = tryReadFile(test_script, &scratch);
 	if(!source) {
 		goto error;
 	}
-
 	if(0 != trySetGrammar(&parser, grammar_file)) {
 		goto error;
 	}
-
-	if (0 != tryScanTokens(&parser, source)) {
+	if(0 != tryScanTokens(&parser, source)) {
 		goto error;
 	}
-
-
 	termMemPool(&scratch);
 	termParser(&parser);
 	return 0;

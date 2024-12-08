@@ -10,7 +10,6 @@
 #define ANSI_RESET   "\x1b[0m"
 
 void setColor(char *);
-
 void resetColor(void);
 
 #endif // COLOR_H

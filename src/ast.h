@@ -19,33 +19,19 @@ typedef struct s_TokenStream {
 } TokenStream;
 
 void initTokenStream(TokenStream *stream, SyntaxTree *tree);
-
 int scanTokensFromSource(SyntaxTree *tree, char *source);
-
 int scanTokensFromSourceNoError(SyntaxTree *tree, char *source);
-
 void defineParentPtrs(SyntaxNode *head);
-
 void addChild(SyntaxNode *parent, SyntaxNode *child, MemPool *pool);
-
 SyntaxNode *wrapNode(SyntaxNode *child, SYNTAX_TYPE stype, MemPool *pool);
-
 SyntaxNode *parseAnd(RuleNode *rnode, TokenStream *stream, MemPool *pool);
-
 SyntaxNode *parseOr(RuleNode *rnode, TokenStream *stream, MemPool *pool);
-
 SyntaxNode *parseIfOne(RuleNode *rnode, TokenStream *stream, MemPool *pool);
-
 SyntaxNode *parseIfMany(RuleNode *rnode, TokenStream *stream, MemPool *pool);
-
 SyntaxNode *parseSyntax(RuleNode *rnode, TokenStream *stream, MemPool *pool);
-
 SyntaxNode *parseToken(RuleNode *rnode, TokenStream *stream, MemPool *pool);
-
 SyntaxNode *parseGrammar(RuleNode* rnode, TokenStream *stream, MemPool *pool);
-
 void printTokenStream(TokenStream *stream);
-
 void printSyntaxNode(SyntaxNode *node, unsigned int indent);
 
 #endif // AST_H

@@ -17,11 +17,8 @@ typedef struct s_VM {
 } VM;
 
 void initVM(VM *vm, char *grammar);
-
 void termVM(VM *vm);
-
 void printTokens(VM *vm);
-
 // void printSource(VM *vm);
 
 #endif // VM_H

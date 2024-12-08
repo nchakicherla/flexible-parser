@@ -5,5 +5,5 @@ scope main {
 		print(x);
 	}
 	return 0;
-	" test
+	" test";
 }

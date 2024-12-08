@@ -24,17 +24,11 @@ typedef struct s_Table {
 } Table;
 
 uint32_t FNV_1a_hash(char* str);
-
 int initTable(Table *table);
-
 int termTable(Table *table);
-
 // void free_table(Table *table);
-
 int insertKey(Table *table, char *key, void *value, OBJ_TYPE type);
-
 int removeKey(Table *table, char *key);
-
 Object *getObject(Table *table, char *key);
 
 #endif // TABLE_H

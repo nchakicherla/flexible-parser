@@ -67,7 +67,7 @@ void initRuleNode(RuleNode *node) {
 	node->parent = NULL;
 }
 
-size_t getSemicolonOffset(Token *tokens) {
+size_t getSemicolonOffsetFromRuleStart(Token *tokens) {
 	size_t ret = 0;
 	while(tokens[ret].type != TK_SEMICOLON) {
 		ret++;
@@ -313,9 +313,12 @@ int populateCyclicalReferences(GrammarRuleArray *rule_array) {
 	return 0;
 }
 */
-int initGrammarRuleArray(GrammarRuleArray *rule_array, char *fileName, MemPool *pool) {
+int tryInitGrammarRuleArray(GrammarRuleArray *rule_array, char *fileName, MemPool *pool) {
 
-	char *source = pReadFile(fileName, pool);
+	char *source = tryReadFile(fileName, pool);
+	if(!source) {
+		return 1;
+	}
 	initScanner(source);
 
 	size_t n_tokens = 0;
@@ -333,7 +336,7 @@ int initGrammarRuleArray(GrammarRuleArray *rule_array, char *fileName, MemPool *
 		tokens[i] = scanToken();
 	}
 
-	rule_array->n_rules = STX_ERR - STX_SCOPE;
+	rule_array->n_rules = (size_t) STX_ERR;
 	rule_array->rules = palloc(pool, rule_array->n_rules * sizeof(GrammarRule));
 
 	for(size_t i = 0; i < rule_array->n_rules; i++) {
@@ -341,7 +344,13 @@ int initGrammarRuleArray(GrammarRuleArray *rule_array, char *fileName, MemPool *
 		rule_array->rules[i].head = palloc(pool, sizeof(RuleNode));
 
 		size_t ruleStart = getRuleStartIndex((SYNTAX_TYPE)i, tokens, n_tokens);
-		size_t semiOffset = getSemicolonOffset(&tokens[ruleStart]);
+		size_t semiOffset = getSemicolonOffsetFromRuleStart(&tokens[ruleStart]);
+		if(tokens[ruleStart].line != tokens[ruleStart + semiOffset].line) {
+			printf("rule start and semicolon not on same line...\n");
+			return 2;
+		}
+		//printf("rule start line: %zu\n", tokens[ruleStart].line);
+		//printf("semi line: %zu\n", tokens[ruleStart + semiOffset].line);
 
 		fillGrammarNode(rule_array->rules[i].head, &tokens[ruleStart], semiOffset, pool);
 		rule_array->rules[i].head->parent = NULL;
@@ -352,7 +361,7 @@ int initGrammarRuleArray(GrammarRuleArray *rule_array, char *fileName, MemPool *
 	//populateCyclicalReferences(rule_array);
 	//printGrammarRuleArray(rule_array);
 
-	FILE *rulesLog = checkFileOpen("./debug/grammar_tree.log", "w");
+	FILE *rulesLog = tryFileOpen("./debug/grammar_tree.log", "w");
 	if(rulesLog) {
 		fPrintGrammarRuleArray(rule_array, rulesLog);
 	}
@@ -462,6 +471,7 @@ void fPrintGrammarRule(GrammarRule *rule, FILE *file) {
 void fPrintGrammarRuleByIndex(GrammarRuleArray *array, int i, FILE *file) {
 	fPrintGrammarRule(&(array->rules[i]), file);
 }
+
 void fPrintGrammarRuleArray(GrammarRuleArray *array, FILE *file) {
 	for(size_t i = 0; i < array->n_rules; i++) {
 		fPrintGrammarRule(&(array->rules[i]), file);

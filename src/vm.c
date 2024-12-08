@@ -6,10 +6,10 @@
 void initVM(VM *vm, char *grammarFile) {
 	initSyntaxTree(&(vm->tree));
 	initMemPool(&(vm->pool));
-	initGrammarRuleArray(&(vm->rule_array), grammarFile, &(vm->pool));
+	tryInitGrammarRuleArray(&(vm->rule_array), grammarFile, &(vm->pool));
 	initTable(&(vm->table));
 	//vm->name = pNewStr(script, &(vm->pool));
-	//vm->source = pReadFile(script, &(vm->pool));
+	//vm->source = tryReadFile(script, &(vm->pool));
 	vm->grammar_name = pNewStr(grammarFile, &(vm->pool));
 	return;
 }

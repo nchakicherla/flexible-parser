@@ -18,9 +18,7 @@ typedef struct s_SyntaxTree {
 } SyntaxTree;
 
 void initSyntaxTree(SyntaxTree *tree);
-
 void resetSyntaxTree(SyntaxTree *tree);
-
 void termSyntaxTree(SyntaxTree *tree);
 
 #endif // SYNTAXTREE_H

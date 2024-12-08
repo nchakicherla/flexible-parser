@@ -24,23 +24,14 @@ typedef struct s_Block {
 } Block;
 
 int initMemPool(MemPool *pool);
-
 int resetMemPool(MemPool *pool);
-
 int termMemPool(MemPool *pool);
-
 void *palloc(MemPool *pool, size_t size);
-
 void *pzalloc(MemPool *pool, size_t size);
-
 void *pGrowAlloc(void *ptr, size_t old_size, size_t new_size, MemPool *pool);
-
 char *pNewStr(char *str, MemPool *pool);
-
 size_t getBytesUsed(MemPool *pool);
-
 size_t getBytesAllocd(MemPool *pool);
-
 void printPoolInfo(MemPool *pool);
 
 // int memSwap(void *ptr1, void *ptr2, size_t size);

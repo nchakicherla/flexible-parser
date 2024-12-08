@@ -1,6 +1,6 @@
 #include "file.h"
 
-char *pReadFile(char *name, MemPool *pool) {
+char *tryReadFile(char *name, MemPool *pool) {
 	FILE *file = NULL;
 	char *output = NULL;
 	long size;
@@ -38,7 +38,7 @@ int writeFileChars(char *name, char *source) {
 	return 0;
 }
 
-FILE *checkFileOpen(char *name, char *mode) {
+FILE *tryFileOpen(char *name, char *mode) {
 	FILE *fp = NULL;
 	if(!(fp = fopen(name, mode))) {
 		return NULL;

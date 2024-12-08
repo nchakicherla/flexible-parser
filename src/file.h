@@ -6,10 +6,8 @@
 
 #include "mempool.h"
 
-char *pReadFile(char *name, MemPool *pool);
-
+char *tryReadFile(char *name, MemPool *pool);
 int writeFileChars(char *name, char *source);
-
-FILE *checkFileOpen(char *name, char *mode);
+FILE *tryFileOpen(char *name, char *mode);
 
 #endif // FILE_H
