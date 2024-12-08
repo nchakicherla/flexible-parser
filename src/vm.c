@@ -8,8 +8,6 @@ void initVM(VM *vm, char *grammarFile) {
 	initMemPool(&(vm->pool));
 	tryInitGrammarRuleArray(&(vm->rule_array), grammarFile, &(vm->pool));
 	initTable(&(vm->table));
-	//vm->name = pNewStr(script, &(vm->pool));
-	//vm->source = tryReadFile(script, &(vm->pool));
 	vm->grammar_name = pNewStr(grammarFile, &(vm->pool));
 	return;
 }
@@ -32,9 +30,3 @@ void printTokens(VM *vm) {
 	}
 	return;
 }
-/*
-void printSource(VM *vm) {
-	printf("SOURCE:\n\"\n%s\n\"\n", vm->source);
-	return;
-}
-*/

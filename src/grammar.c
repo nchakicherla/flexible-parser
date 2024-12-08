@@ -17,14 +17,7 @@ static SYNTAX_TYPE getSNodeTypeFromLiteral(char *str) {
 	}
 	return STX_ERR;
 }
-/*
-static TOKEN_TYPE tokenTypeValFromLiteral(char *str) {
-	for (size_t i = 0; i < (sizeof(__tokenNameLiterals) / sizeof(char *)); i++) {
-		if(0 == strcmp(__tokenNameLiterals[i], str)) return i;
-	}
-	return TK_ERROR;
-}
-*/
+
 static TOKEN_TYPE tokenTypeValFromNChars(char* str, size_t n) {
 	for (size_t i = 0; i < (sizeof(__tokenNameLiterals) / sizeof(char *)); i++) {
 		if(0 == strncmp(__tokenNameLiterals[i], str, n)) return i;
@@ -32,16 +25,6 @@ static TOKEN_TYPE tokenTypeValFromNChars(char* str, size_t n) {
 	return TK_ERROR;
 }
 
-/*
-static SYNTAX_TYPE getSNodeTypeFromNChars(char *str, size_t n) {
-	for (size_t i = 0; i < (sizeof(syntax_labels) / sizeof(char *)); i++) {
-		if(0 == strncmp(str, syntax_labels[i], n)) {
-			return i;
-		}
-	}
-	return STX_ERR;
-}
-*/
 static void __printNTabs(unsigned int n) {
 	for(unsigned int i = 0; i < n; i++) {
 		putchar('\t');
@@ -268,7 +251,6 @@ int fillGrammarNode(RuleNode *node, Token *tokens, size_t n, MemPool *pool) {
 				tmp_str[i] = tokens[0].start[i];
 			}
 			tmp_str[tokens[0].len] = '\0';
-			//node->nested_type.s = getSNodeTypeFromNChars(tokens[0].start, tokens[0].len);
 			node->nested_type.s = getSNodeTypeFromLiteral(tmp_str);
 			break;
 		}
@@ -307,12 +289,7 @@ int populateCyclicalReferences(RuleNode *node, GrammarRuleArray *rule_array) {
 	}
 	return 0;
 }
-/*
-int populateCyclicalReferences(GrammarRuleArray *rule_array) {
 
-	return 0;
-}
-*/
 int tryInitGrammarRuleArray(GrammarRuleArray *rule_array, char *fileName, MemPool *pool) {
 
 	char *source = tryReadFile(fileName, pool);
@@ -344,18 +321,16 @@ int tryInitGrammarRuleArray(GrammarRuleArray *rule_array, char *fileName, MemPoo
 		rule_array->rules[i].head = palloc(pool, sizeof(RuleNode));
 
 		size_t ruleStart = getRuleStartIndex((SYNTAX_TYPE)i, tokens, n_tokens);
-		if(ruleStart == 0) {
+		if(ruleStart == 0) { // ruleStart should be at least 2 since it's always preceded by "STX_XYZ ="
 			printf("valid rule start for i = %zu not found\n", i);
 			return 2;
 		}
 
-		size_t semiOffset = getSemicolonOffsetFromRuleStart(&tokens[ruleStart]);
+		size_t semiOffset = getSemicolonOffsetFromRuleStart(&tokens[ruleStart]); // get rule length in Tokens
 		if(tokens[ruleStart].line != tokens[ruleStart + semiOffset].line) {
 			printf("rule start and semicolon not on same line...\n");
 			return 3;
 		}
-		//printf("rule start line: %zu\n", tokens[ruleStart].line);
-		//printf("semi line: %zu\n", tokens[ruleStart + semiOffset].line);
 
 		fillGrammarNode(rule_array->rules[i].head, &tokens[ruleStart], semiOffset, pool);
 		rule_array->rules[i].head->parent = NULL;
@@ -363,14 +338,12 @@ int tryInitGrammarRuleArray(GrammarRuleArray *rule_array, char *fileName, MemPoo
 	for(size_t i = 0; i < rule_array->n_rules; i++) {
 		populateCyclicalReferences(rule_array->rules[i].head, rule_array);
 	}
-	//populateCyclicalReferences(rule_array);
-	//printGrammarRuleArray(rule_array);
 
-	FILE *rulesLog = tryFileOpen("./debug/grammar_tree.log", "w");
+	FILE *rulesLog = fopen("./debug/grammar_tree.log", "w");
 	if(rulesLog) {
 		fPrintGrammarRuleArray(rule_array, rulesLog);
+		fclose(rulesLog);
 	}
-	fclose(rulesLog);
 	return 0;
 }
 

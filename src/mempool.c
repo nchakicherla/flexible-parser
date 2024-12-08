@@ -5,19 +5,7 @@
 
 #define MEMORY_HOG_FACTOR 8
 #define DEF_BLOCK_INIT_SIZE 1024
-/*
-static inline Block *getLastBlock(MemPool *pool) {
-	
-	Block *current = pool->first_block;
-	Block *next = current->next;
 
-	while(next) {
-		current = next;
-		next = next->next;
-	}
-	return current;
-}
-*/
 static Block *newInitBlock(size_t block_size) {
 	
 	Block *block =  malloc(sizeof(Block));
@@ -40,18 +28,7 @@ static Block *newInitBlock(size_t block_size) {
 
 int initMemPool(MemPool *pool) {
 	size_t block_size = DEF_BLOCK_INIT_SIZE;
-/*
-	pool->first_block = malloc(sizeof(Block));
-	// pool->first_block = calloc(1, sizeof(Block));
-	if(!pool->first_block) return 1;
-	
-	pool->first_block->data = malloc(block_size);
-	// pool->first_block->data = calloc(1, block_size);
-	if(!pool->first_block->data) return 2;
 
-	pool->first_block->data_size = DEF_BLOCK_INIT_SIZE;
-	pool->first_block->next = NULL;
-*/
 	pool->first_block = newInitBlock(block_size);
 
 	pool->bytes_used = 0;
@@ -94,7 +71,6 @@ int resetMemPool(MemPool *pool) {
 
 	pool->next_free = pool->first_block->data;
 	pool->next_free_size = pool->first_block->data_size;
-	// pool->last_block_size = pool->block->data_size;
 
 	pool->bytes_used = 0;
 	pool->bytes_allocd = sizeof(MemPool) + sizeof(Block) + pool->last_block_size;
@@ -103,8 +79,6 @@ int resetMemPool(MemPool *pool) {
 
 void *palloc(MemPool *pool, size_t size) {
 	
-	// Block *last_block = getLastBlock(pool);
-
 	if(pool->next_free_size < size) {
 		Block *last_block = pool->last_block;
 		Block *new_block = NULL;
@@ -162,7 +136,6 @@ char *pNewStr(char *str, MemPool *pool) {
 	size_t len = strlen(str);
 
 	output = palloc(pool, len + 1);
-	// if(!output) return NULL;
 
 	for(size_t i = 0; i < len; i++) {
 		output[i] = str[i];
@@ -185,16 +158,3 @@ void printPoolInfo(MemPool *pool) {
 	printf("\tALLOCD: %zu, (%f MB)\n", getBytesAllocd(pool), (double)getBytesAllocd(pool) / (1024 * 1024));
 	return;
 }
-
-/*
-int memSwap(void *ptr1, void *ptr2, size_t size, MemPool *mPool) {
-	void *temp = palloc(mPool, size);
-	if(!temp) return 1;
-
-	memcpy(temp, ptr1, size);
-	memcpy(ptr1, ptr2, size);
-	memcpy(ptr2, temp, size);
-
-	return 0;
-}
-*/

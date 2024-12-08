@@ -34,6 +34,4 @@ size_t getBytesUsed(MemPool *pool);
 size_t getBytesAllocd(MemPool *pool);
 void printPoolInfo(MemPool *pool);
 
-// int memSwap(void *ptr1, void *ptr2, size_t size);
-
 #endif // MEMPOOL_H

@@ -10,14 +10,10 @@ BIN = ./bin/main.run
 MAIN = 	./obj/main.o
 
 OBJS = 	./obj/file.o \
-		./obj/table.o \
 		./obj/mempool.o \
 		./obj/scanner.o \
 		./obj/ast.o \
-		./obj/random.o \
-		./obj/vm.o \
 		./obj/object.o \
-		./obj/array.o \
 		./obj/color.o \
 		./obj/syntax_tree.o \
 		./obj/syntax_node.o \

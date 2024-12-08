@@ -1,7 +1,6 @@
 #include "parser.h"
 
 void initParser(Parser *parser) {
-	//parser->source = NULL;
 	parser->n_tokens = 0;
 	parser->tokens = NULL;
 	parser->head = NULL;
@@ -36,15 +35,7 @@ int trySetGrammar(Parser *parser, char *grammar_file) {
 	termMemPool(&scratch);
 	return 0;
 }
-/*
-int tryReadSource(Parser *parser, char *source) {
-	parser->source = tryReadFile(source, &parser->p);
-	if(!parser->source) {
-		return 1;
-	}
-	return 0;
-}
-*/
+
 int tryScanTokens(Parser *parser, char *source) {
 
 	if(!parser->is_initialized) {

@@ -34,25 +34,6 @@ static char *syntaxTypeLiteralLookup(SYNTAX_TYPE type) {
 	return syntax_labels[type];
 }
 
-/*
-static SYNTAX_TYPE getSNodeTypeFromLiteral(char *str) {
-	for (size_t i = 0; i < (sizeof(syntax_labels) / sizeof(char *)); i++) {
-		if(0 == strcmp(str, syntax_labels[i])) {
-			return i;
-		}
-	}
-	return STX_ERR;
-}
-
-static SYNTAX_TYPE getSNodeTypeFromNChars(char *str, size_t n) {
-	for (size_t i = 0; i < (sizeof(syntax_labels) / sizeof(char *)); i++) {
-		if(0 == strncmp(str, syntax_labels[i], n)) {
-			return i;
-		}
-	}
-	return STX_ERR;
-}
-*/
 void initTokenStream(TokenStream *stream, SyntaxTree *tree) {
 	stream->tk = tree->tokens;
 	stream->pos = 0;
@@ -174,9 +155,7 @@ SyntaxNode *parseAnd(RuleNode *rnode, TokenStream *stream, MemPool *pool) {
 			return NULL;
 		}
 
-		if(child->type == STX_UNSPECIFIED && child->is_token == false)
-
-		{
+		if(child->type == STX_UNSPECIFIED && child->is_token == false) {
 			if(rnode->children[i].nested_type.g == GRM_IFONE) {
 				if((rnode->children[i].children[0].node_type == RULE_GRM &&
 					rnode->children[i].children[0].nested_type.g == GRM_OR)
@@ -242,8 +221,6 @@ SyntaxNode *parseSyntax(RuleNode *rnode, TokenStream *stream, MemPool *pool) {
 		} else {
 			node->type = rnode->nested_type.s;
 		}
-		//printf("matched syntax: \n");
-		//printGrammarNode(rnode->rule_head, 0);
 	} else {
 		return NULL;
 	}
@@ -257,7 +234,6 @@ SyntaxNode *parseToken(RuleNode *rnode, TokenStream *stream, MemPool *pool) {
 		node->is_token = true;
 		memcpy(&node->token, &stream->tk[stream->pos], sizeof(Token));
 		stream->pos++;
-		//printf("made tk node: %.*s\n", (int)node->token.len, node->token.start);
 		return node;
 	} else {
 		return NULL;

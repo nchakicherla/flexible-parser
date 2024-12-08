@@ -9,7 +9,7 @@ char *tryReadFile(char *name, MemPool *pool) {
 	if (!file)
 		return NULL;
 
-	// get length of file as size
+	// get length of file as size, then rewind pointer
 	fseek(file, 0, SEEK_END);
 	size = ftell(file);
 	fseek(file, 0, SEEK_SET);
