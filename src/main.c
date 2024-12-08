@@ -31,14 +31,21 @@ int main(void) {
 
 	char *source = tryReadFile(test_script, &scratch);
 	if(!source) {
+		printf("couldn't read file...\n");
 		goto error;
 	}
 	if(0 != trySetGrammar(&parser, grammar_file)) {
+		printf("couldn't set grammar...\n");
 		goto error;
 	}
 	if(0 != tryScanTokens(&parser, source)) {
+		printf("couldn't tokenize...\n");
 		goto error;
 	}
+
+	// try parsing based on a rule in GrammarRuleArray in Parser, or brute-force and check all
+	// parsing fails 
+
 	termMemPool(&scratch);
 	termParser(&parser);
 	return 0;
