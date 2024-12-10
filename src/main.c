@@ -2,11 +2,9 @@
 
 #include "common.h"
 
-//#include "scanner.h"
 #include "file.h"
 #include "table.h"
 #include "mempool.h"
-#include "vm.h"
 #include "ast.h"
 
 #include "random.h"
@@ -26,7 +24,7 @@ int main(void) {
 	MemPool scratch;
 	initMemPool(&scratch); // scratch arena for source file contents
 
-	Parser parser = {0};
+	Parser parser = {0}; // initialized to zero for is_initialized flag
 	initParser(&parser);
 
 	char *source = tryReadFile(test_script, &scratch);
@@ -34,10 +32,12 @@ int main(void) {
 		printf("couldn't read file...\n");
 		goto error;
 	}
+
 	if(0 != trySetGrammar(&parser, grammar_file)) {
 		printf("couldn't set grammar...\n");
 		goto error;
 	}
+
 	if(0 != tryScanTokens(&parser, source)) {
 		printf("couldn't tokenize...\n");
 		goto error;

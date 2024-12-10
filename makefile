@@ -15,7 +15,6 @@ OBJS = 	./obj/file.o \
 		./obj/ast.o \
 		./obj/object.o \
 		./obj/color.o \
-		./obj/syntax_tree.o \
 		./obj/syntax_node.o \
 		./obj/grammar.o \
 		./obj/parser.o \
