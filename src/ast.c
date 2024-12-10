@@ -2,7 +2,7 @@
 #include "scanner.h"
 #include "ast.h"
 #include "file.h"
-#include "vm.h"
+//#include "vm.h"
 #include "color.h"
 
 #include "syntax_labels.h"
@@ -32,67 +32,6 @@ void __fPrintNTabs(unsigned int n, FILE *file) {
 
 static char *syntaxTypeLiteralLookup(SYNTAX_TYPE type) {
 	return syntax_labels[type];
-}
-
-void initTokenStream(TokenStream *stream, SyntaxTree *tree) {
-	stream->tk = tree->tokens;
-	stream->pos = 0;
-	stream->n = tree->n_tokens;
-}
-
-int scanTokensFromSource(SyntaxTree *tree, char *source) {
-
-	size_t len = strlen(source);
-	tree->source = palloc(&(tree->pool), len + 1);
-	memcpy(tree->source, source, len + 1);
-	tree->source[len] = '\0';
-
-	initScanner(tree->source);
-
-	size_t n_tokens = 0;
-	while(true) {
-		Token token = scanToken();
-		n_tokens++;
-		if (token.type == TK_EOF) break;
-	}
-
-	tree->n_tokens = n_tokens;
-	tree->tokens = palloc(&(tree->pool), (n_tokens * sizeof(Token)));
-
-	initScanner(tree->source);
-
-	for(size_t i = 0; i < n_tokens; i++) {
-		tree->tokens[i] = scanToken();
-	}
-	return 0;
-}
-
-int scanTokensFromSourceNoError(SyntaxTree *tree, char *source) {
-
-	size_t len = strlen(source);
-	tree->source = palloc(&(tree->pool), len + 1);
-	memcpy(tree->source, source, len + 1);
-	tree->source[len] = '\0';
-
-	initScanner(tree->source);
-
-	size_t n_tokens = 0;
-	while(true) {
-		Token token = scanToken();
-		n_tokens++;
-		if (token.type == TK_ERROR) return 1; // return 1 if error because no errors allowed
-		if (token.type == TK_EOF) break;
-	}
-
-	tree->n_tokens = n_tokens;
-	tree->tokens = palloc(&(tree->pool), (n_tokens * sizeof(Token)));
-
-	initScanner(tree->source);
-
-	for(size_t i = 0; i < n_tokens; i++) {
-		tree->tokens[i] = scanToken();
-	}
-	return 0;
 }
 
 void __printTokens(Token *tokens, size_t n) {

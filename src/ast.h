@@ -8,7 +8,8 @@
 #include "table.h"
 #include "scanner.h"
 #include "file.h"
-#include "syntax_tree.h"
+//#include "syntax_tree.h"
+#include "syntax_node.h"
 #include "syntax_types.h"
 #include "grammar.h"
 
@@ -18,9 +19,6 @@ typedef struct s_TokenStream {
 	size_t n;
 } TokenStream;
 
-void initTokenStream(TokenStream *stream, SyntaxTree *tree);
-int scanTokensFromSource(SyntaxTree *tree, char *source);
-int scanTokensFromSourceNoError(SyntaxTree *tree, char *source);
 void defineParentPtrs(SyntaxNode *head);
 void addChild(SyntaxNode *parent, SyntaxNode *child, MemPool *pool);
 SyntaxNode *wrapNode(SyntaxNode *child, SYNTAX_TYPE stype, MemPool *pool);

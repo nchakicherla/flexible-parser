@@ -1,4 +1,3 @@
-//#include "syntax_tree.h"
 #include "scanner.h"
 #include "token_types.h"
 #include "token_labels.h"
@@ -37,6 +36,9 @@ char peekNextNext(void) {
 	if (isAtEnd()) {
 		return '\0';
 	}
+	if(scanner.current[1] == '\0') {
+		return '\0';
+	}
 	return scanner.current[2];
 }
 
@@ -53,15 +55,6 @@ bool match(char expect) {
 }
 
 Token makeToken(TOKEN_TYPE type) {
-	Token token;
-	token.type = type;
-	token.start = scanner.start;
-	token.len = (size_t)(scanner.current - scanner.start);
-	token.line = scanner.line;
-	return token;
-}
-
-Token makeTokenWPool(TOKEN_TYPE type) {
 	Token token;
 	token.type = type;
 	token.start = scanner.start;
