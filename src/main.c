@@ -2,17 +2,10 @@
 
 #include "common.h"
 
-#include "file.h"
-#include "table.h"
 #include "mempool.h"
-#include "ast.h"
-
-#include "random.h"
-#include "color.h"
+#include "file.h"
 
 #include "parser.h"
-
-#include <time.h>
 
 #define INPUT_BUFFER_SIZE 512
 

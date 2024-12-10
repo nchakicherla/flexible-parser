@@ -5,7 +5,7 @@
 #include "grammar.h"
 #include "scanner.h"
 #include "ast.h"
-#include "syntax_node.h"
+#include "ast_node.h"
 
 typedef struct s_Parser {
 	GrammarRuleArray grammar;

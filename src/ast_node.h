@@ -1,5 +1,5 @@
-#ifndef SYNTAX_NODE_H
-#define SYNTAX_NODE_H
+#ifndef AST_NODE_H
+#define AST_NODE_H
 
 #include "common.h"
 #include "scanner.h"
@@ -22,4 +22,4 @@ typedef struct s_SyntaxNode {
 
 void initSyntaxNode(SyntaxNode *node);
 
-#endif // SYNTAX_NODE_H
+#endif // AST_NODE_H

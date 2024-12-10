@@ -28,7 +28,7 @@ static char *syntax_labels[] = {
 
 	"STX_INCREMENT", "STX_DECREMENT", "STX_NEGATE",
 
-	"STX_ERR", "STX_UNSPECIFIED",
+	"STX_ERROR",
 };
 
 #endif // SYNTAX_LABELS_H

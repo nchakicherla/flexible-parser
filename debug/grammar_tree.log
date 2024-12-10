@@ -689,3 +689,10 @@ RULE: STX_NEGATE
 ----
 ----
 
+RULE: STX_ERROR
+-
+	TOKEN --- TK_ERROR
+
+----
+----
+

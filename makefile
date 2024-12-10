@@ -10,12 +10,12 @@ BIN = ./bin/main.run
 MAIN = 	./obj/main.o
 
 OBJS = 	./obj/file.o \
+		./obj/object.o \
 		./obj/mempool.o \
 		./obj/scanner.o \
 		./obj/ast.o \
-		./obj/object.o \
+		./obj/ast_node.o \
 		./obj/color.o \
-		./obj/syntax_node.o \
 		./obj/grammar.o \
 		./obj/parser.o \
 

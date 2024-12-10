@@ -5,11 +5,10 @@
 #include "common.h"
 
 #include "mempool.h"
-#include "table.h"
 #include "scanner.h"
 #include "file.h"
 //#include "syntax_tree.h"
-#include "syntax_node.h"
+#include "ast_node.h"
 #include "syntax_types.h"
 #include "grammar.h"
 

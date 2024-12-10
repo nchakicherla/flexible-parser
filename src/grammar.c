@@ -15,7 +15,7 @@ static SYNTAX_TYPE getSNodeTypeFromLiteral(char *str) {
 			return i;
 		}
 	}
-	return STX_ERR;
+	return STX_ERROR;
 }
 
 static TOKEN_TYPE tokenTypeValFromNChars(char* str, size_t n) {
@@ -313,7 +313,7 @@ int tryInitGrammarRuleArray(GrammarRuleArray *rule_array, char *fileName, MemPoo
 		tokens[i] = scanToken();
 	}
 
-	rule_array->n_rules = (size_t) STX_ERR;
+	rule_array->n_rules = (size_t) STX_ERROR;
 	rule_array->rules = palloc(pool, rule_array->n_rules * sizeof(GrammarRule));
 
 	for(size_t i = 0; i < rule_array->n_rules; i++) {

@@ -1,7 +1,7 @@
-#include "syntax_node.h"
+#include "ast_node.h"
 
 void initSyntaxNode(SyntaxNode *node) {
-	node->type = STX_UNSPECIFIED;
+	node->type = STX_ERROR;
 	node->is_token = false;
 	//node->evaluated = false;
 	//node->object = NULL;

@@ -94,7 +94,7 @@ SyntaxNode *parseAnd(RuleNode *rnode, TokenStream *stream, MemPool *pool) {
 			return NULL;
 		}
 
-		if(child->type == STX_UNSPECIFIED && child->is_token == false) {
+		if(child->type == STX_ERROR && child->is_token == false) {
 			if(rnode->children[i].nested_type.g == GRM_IFONE) {
 				if((rnode->children[i].children[0].node_type == RULE_GRM &&
 					rnode->children[i].children[0].nested_type.g == GRM_OR)
@@ -132,7 +132,8 @@ SyntaxNode *parseIfMany(RuleNode *rnode, TokenStream *stream, MemPool *pool) {
 	SyntaxNode *node = palloc(pool, sizeof(SyntaxNode));
 	initSyntaxNode(node);
 	size_t reset = stream->pos;
-	while(1) {
+	
+	while(true) {
 		reset = stream->pos;
 		SyntaxNode *child = parseGrammar(rnode->children, stream, pool);
 		if(child) {
