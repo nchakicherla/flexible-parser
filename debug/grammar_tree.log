@@ -1,0 +1,698 @@
+RULE: STX_SCOPE
+-
+	AND
+		IFONE
+			AND
+				TOKEN --- TK_SCOPE
+				TOKEN --- TK_IDENTIFIER
+		TOKEN --- TK_LBRACE
+		OR
+			TOKEN --- TK_SEMICOLON
+			GROUP
+				AND
+					OR
+						SYNTAX --- STX_CLASS
+						SYNTAX --- STX_FNDEF
+						SYNTAX --- STX_IF
+						SYNTAX --- STX_WHILE
+						SYNTAX --- STX_FOR
+						SYNTAX --- STX_DECLARE
+						SYNTAX --- STX_ASSIGN
+						SYNTAX --- STX_INIT
+						SYNTAX --- STX_ECHO
+						SYNTAX --- STX_BREAK
+						SYNTAX --- STX_RETURN
+						SYNTAX --- STX_EXIT
+					IFMANY
+						OR
+							SYNTAX --- STX_CLASS
+							SYNTAX --- STX_FNDEF
+							SYNTAX --- STX_IF
+							SYNTAX --- STX_WHILE
+							SYNTAX --- STX_FOR
+							SYNTAX --- STX_DECLARE
+							SYNTAX --- STX_ASSIGN
+							SYNTAX --- STX_INIT
+							SYNTAX --- STX_ECHO
+							SYNTAX --- STX_BREAK
+							SYNTAX --- STX_RETURN
+							SYNTAX --- STX_EXIT
+		TOKEN --- TK_RBRACE
+
+----
+----
+
+RULE: STX_CLASS
+-
+	AND
+		TOKEN --- TK_CLASS
+		TOKEN --- TK_IDENTIFIER
+		SYNTAX --- STX_SCOPE
+
+----
+----
+
+RULE: STX_FNDEF
+-
+	AND
+		TOKEN --- TK_FN
+		TOKEN --- TK_IDENTIFIER
+		TOKEN --- TK_LPAREN
+		OR
+			SYNTAX --- STX_NIL
+			GROUP
+				AND
+					SYNTAX --- STX_VTYPE
+					SYNTAX --- STX_VAR
+					IFMANY
+						AND
+							TOKEN --- TK_COMMA
+							SYNTAX --- STX_VTYPE
+							SYNTAX --- STX_VAR
+		TOKEN --- TK_RPAREN
+		SYNTAX --- STX_RARROW
+		OR
+			SYNTAX --- STX_VTYPE
+			SYNTAX --- STX_NIL
+		SYNTAX --- STX_SCOPE
+
+----
+----
+
+RULE: STX_IF
+-
+	AND
+		TOKEN --- TK_IF
+		TOKEN --- TK_LPAREN
+		SYNTAX --- STX_EXPR
+		TOKEN --- TK_RPAREN
+		SYNTAX --- STX_SCOPE
+		IFMANY
+			AND
+				TOKEN --- TK_ELSE
+				TOKEN --- TK_IF
+				TOKEN --- TK_LPAREN
+				SYNTAX --- STX_EXPR
+				TOKEN --- TK_RPAREN
+				SYNTAX --- STX_SCOPE
+		IFONE
+			AND
+				TOKEN --- TK_ELSE
+				SYNTAX --- STX_SCOPE
+
+----
+----
+
+RULE: STX_WHILE
+-
+	AND
+		TOKEN --- TK_WHILE
+		TOKEN --- TK_LPAREN
+		SYNTAX --- STX_EXPR
+		TOKEN --- TK_RPAREN
+		SYNTAX --- STX_SCOPE
+
+----
+----
+
+RULE: STX_FOR
+-
+	AND
+		TOKEN --- TK_FOR
+		TOKEN --- TK_LPAREN
+		OR
+			SYNTAX --- STX_ASSIGN
+			SYNTAX --- STX_INIT
+		OR
+			SYNTAX --- STX_GEXPR
+			SYNTAX --- STX_EXPR
+		TOKEN --- TK_SEMICOLON
+		OR
+			SYNTAX --- STX_INCREMENT
+			SYNTAX --- STX_DECREMENT
+		TOKEN --- TK_RPAREN
+		OR
+			TOKEN --- TK_SEMICOLON
+			SYNTAX --- STX_SCOPE
+
+----
+----
+
+RULE: STX_FORRANGE
+-
+	AND
+		TOKEN --- TK_FOR
+		TOKEN --- TK_LPAREN
+		SYNTAX --- STX_VAR
+		TOKEN --- TK_IN
+		OR
+			SYNTAX --- STX_MEMBER
+			SYNTAX --- STX_FNCALL
+			SYNTAX --- STX_VAR
+		TOKEN --- TK_RPAREN
+		OR
+			TOKEN --- TK_SEMICOLON
+			SYNTAX --- STX_SCOPE
+
+----
+----
+
+RULE: STX_SWITCH
+-
+	AND
+		TOKEN --- TK_SWITCH
+		TOKEN --- TK_LPAREN
+		SYNTAX --- STX_EXPR
+		TOKEN --- TK_RPAREN
+		TOKEN --- TK_LBRACE
+		SYNTAX --- STX_CASE
+		IFMANY
+			SYNTAX --- STX_CASE
+		TOKEN --- TK_RBRACE
+
+----
+----
+
+RULE: STX_CASE
+-
+	AND
+		TOKEN --- TK_CASE
+		SYNTAX --- STX_EXPR
+		TOKEN --- TK_COLON
+		SYNTAX --- STX_SCOPE
+
+----
+----
+
+RULE: STX_INIT
+-
+	AND
+		SYNTAX --- STX_VTYPE
+		SYNTAX --- STX_VAR
+		SYNTAX --- STX_EQUAL
+		SYNTAX --- STX_EXPR
+		TOKEN --- TK_SEMICOLON
+
+----
+----
+
+RULE: STX_DECLARE
+-
+	AND
+		SYNTAX --- STX_VTYPE
+		SYNTAX --- STX_VAR
+		TOKEN --- TK_SEMICOLON
+
+----
+----
+
+RULE: STX_ASSIGN
+-
+	AND
+		OR
+			SYNTAX --- STX_MEMBER
+			SYNTAX --- STX_VAR
+		SYNTAX --- STX_ASSIGNOP
+		SYNTAX --- STX_EXPR
+		TOKEN --- TK_SEMICOLON
+
+----
+----
+
+RULE: STX_ECHO
+-
+	AND
+		OR
+			SYNTAX --- STX_INCREMENT
+			SYNTAX --- STX_DECREMENT
+			SYNTAX --- STX_MEMBER
+			SYNTAX --- STX_FNCALL
+			SYNTAX --- STX_EXPR
+		TOKEN --- TK_SEMICOLON
+
+----
+----
+
+RULE: STX_BREAK
+-
+	AND
+		TOKEN --- TK_BREAK
+		TOKEN --- TK_SEMICOLON
+
+----
+----
+
+RULE: STX_RETURN
+-
+	AND
+		TOKEN --- TK_RETURN
+		IFONE
+			OR
+				SYNTAX --- STX_EXPR
+				SYNTAX --- STX_MEMBER
+				SYNTAX --- STX_FNCALL
+				SYNTAX --- STX_INDEX
+				SYNTAX --- STX_VAR
+				SYNTAX --- STX_NUM
+				SYNTAX --- STX_STRLIT
+		TOKEN --- TK_SEMICOLON
+
+----
+----
+
+RULE: STX_EXIT
+-
+	AND
+		TOKEN --- TK_EXIT
+		TOKEN --- TK_LPAREN
+		SYNTAX --- STX_EXPR
+		TOKEN --- TK_RPAREN
+		TOKEN --- TK_SEMICOLON
+
+----
+----
+
+RULE: STX_GEXPR
+-
+	AND
+		TOKEN --- TK_LPAREN
+		SYNTAX --- STX_EXPR
+		TOKEN --- TK_RPAREN
+
+----
+----
+
+RULE: STX_EXPR
+-
+	AND
+		IFONE
+			OR
+				SYNTAX --- STX_NOT
+				SYNTAX --- STX_NEGATE
+		OR
+			SYNTAX --- STX_GEXPR
+			SYNTAX --- STX_MEMBER
+			SYNTAX --- STX_INDEX
+			SYNTAX --- STX_FNCALL
+			SYNTAX --- STX_VAR
+			SYNTAX --- STX_NUM
+			SYNTAX --- STX_STRLIT
+			SYNTAX --- STX_TRUE
+			SYNTAX --- STX_FALSE
+		IFMANY
+			AND
+				OR
+					SYNTAX --- STX_ARITHOP
+					SYNTAX --- STX_BOOLOP
+				IFONE
+					OR
+						SYNTAX --- STX_NOT
+						SYNTAX --- STX_NEGATE
+				OR
+					SYNTAX --- STX_GEXPR
+					SYNTAX --- STX_MEMBER
+					SYNTAX --- STX_INDEX
+					SYNTAX --- STX_FNCALL
+					SYNTAX --- STX_VAR
+					SYNTAX --- STX_NUM
+					SYNTAX --- STX_STRLIT
+					SYNTAX --- STX_TRUE
+					SYNTAX --- STX_FALSE
+
+----
+----
+
+RULE: STX_VTYPE
+-
+	AND
+		IFONE
+			TOKEN --- TK_CONST
+		OR
+			TOKEN --- TK_BOOL
+			TOKEN --- TK_FLT
+			TOKEN --- TK_I64
+			TOKEN --- TK_I32
+			TOKEN --- TK_I16
+			TOKEN --- TK_I8
+			TOKEN --- TK_U64
+			TOKEN --- TK_U32
+			TOKEN --- TK_U16
+			TOKEN --- TK_U8
+			TOKEN --- TK_STR
+			TOKEN --- TK_IDENTIFIER
+		IFONE
+			AND
+				TOKEN --- TK_LSQUARE
+				TOKEN --- TK_RSQUARE
+
+----
+----
+
+RULE: STX_VAR
+-
+	TOKEN --- TK_IDENTIFIER
+
+----
+----
+
+RULE: STX_MEMBER
+-
+	AND
+		OR
+			SYNTAX --- STX_THIS
+			SYNTAX --- STX_INDEX
+			TOKEN --- TK_IDENTIFIER
+		TOKEN --- TK_DOT
+		OR
+			SYNTAX --- STX_INDEX
+			TOKEN --- TK_IDENTIFIER
+		IFMANY
+			AND
+				TOKEN --- TK_DOT
+				OR
+					SYNTAX --- STX_INDEX
+					TOKEN --- TK_IDENTIFIER
+
+----
+----
+
+RULE: STX_THIS
+-
+	TOKEN --- TK_THIS
+
+----
+----
+
+RULE: STX_INDEX
+-
+	AND
+		SYNTAX --- STX_VAR
+		TOKEN --- TK_LSQUARE
+		OR
+			SYNTAX --- STX_GEXPR
+			SYNTAX --- STX_EXPR
+		TOKEN --- TK_RSQUARE
+		IFMANY
+			AND
+				TOKEN --- TK_LSQUARE
+				OR
+					SYNTAX --- STX_GEXPR
+					SYNTAX --- STX_EXPR
+				TOKEN --- TK_RSQUARE
+
+----
+----
+
+RULE: STX_FNCALL
+-
+	AND
+		OR
+			SYNTAX --- STX_MEMBER
+			TOKEN --- TK_IDENTIFIER
+		TOKEN --- TK_LPAREN
+		IFONE
+			OR
+				SYNTAX --- STX_EXPR
+				SYNTAX --- STX_NIL
+		IFMANY
+			AND
+				TOKEN --- TK_COMMA
+				OR
+					SYNTAX --- STX_EXPR
+					SYNTAX --- STX_NIL
+		TOKEN --- TK_RPAREN
+
+----
+----
+
+RULE: STX_NUM
+-
+	TOKEN --- TK_NUM
+
+----
+----
+
+RULE: STX_STRLIT
+-
+	TOKEN --- TK_CHARS
+
+----
+----
+
+RULE: STX_NIL
+-
+	TOKEN --- TK_NIL
+
+----
+----
+
+RULE: STX_ARITHOP
+-
+	OR
+		SYNTAX --- STX_MULT
+		SYNTAX --- STX_DIV
+		SYNTAX --- STX_SUM
+		SYNTAX --- STX_DIFF
+		SYNTAX --- STX_MOD
+
+----
+----
+
+RULE: STX_BOOLOP
+-
+	OR
+		SYNTAX --- STX_GREATER
+		SYNTAX --- STX_LESS
+		SYNTAX --- STX_NOT_EQUAL
+		SYNTAX --- STX_EQUAL_EQUAL
+		SYNTAX --- STX_GREATER_EQUAL
+		SYNTAX --- STX_LESS_EQUAL
+		SYNTAX --- STX_AND
+		SYNTAX --- STX_OR
+
+----
+----
+
+RULE: STX_ASSIGNOP
+-
+	OR
+		SYNTAX --- STX_EQUAL
+		SYNTAX --- STX_PLUS_EQUAL
+		SYNTAX --- STX_MINUS_EQUAL
+		SYNTAX --- STX_STAR_EQUAL
+		SYNTAX --- STX_DIV_EQUAL
+
+----
+----
+
+RULE: STX_MULT
+-
+	TOKEN --- TK_STAR
+
+----
+----
+
+RULE: STX_DIV
+-
+	TOKEN --- TK_FSLASH
+
+----
+----
+
+RULE: STX_SUM
+-
+	TOKEN --- TK_PLUS
+
+----
+----
+
+RULE: STX_DIFF
+-
+	TOKEN --- TK_MINUS
+
+----
+----
+
+RULE: STX_MOD
+-
+	TOKEN --- TK_MOD
+
+----
+----
+
+RULE: STX_TRUE
+-
+	TOKEN --- TK_TRUE
+
+----
+----
+
+RULE: STX_FALSE
+-
+	TOKEN --- TK_FALSE
+
+----
+----
+
+RULE: STX_AND
+-
+	TOKEN --- TK_AND
+
+----
+----
+
+RULE: STX_OR
+-
+	TOKEN --- TK_OR
+
+----
+----
+
+RULE: STX_NOT
+-
+	TOKEN --- TK_BANG
+
+----
+----
+
+RULE: STX_GREATER
+-
+	TOKEN --- TK_GREATER
+
+----
+----
+
+RULE: STX_LESS
+-
+	TOKEN --- TK_LESS
+
+----
+----
+
+RULE: STX_EQUAL_EQUAL
+-
+	TOKEN --- TK_EQUAL_EQUAL
+
+----
+----
+
+RULE: STX_NOT_EQUAL
+-
+	TOKEN --- TK_BANG_EQUAL
+
+----
+----
+
+RULE: STX_GREATER_EQUAL
+-
+	TOKEN --- TK_GREATER_EQUAL
+
+----
+----
+
+RULE: STX_LESS_EQUAL
+-
+	TOKEN --- TK_LESS_EQUAL
+
+----
+----
+
+RULE: STX_RARROW
+-
+	AND
+		TOKEN --- TK_EQUAL
+		TOKEN --- TK_GREATER
+
+----
+----
+
+RULE: STX_EQUAL
+-
+	TOKEN --- TK_EQUAL
+
+----
+----
+
+RULE: STX_PLUS_EQUAL
+-
+	AND
+		TOKEN --- TK_PLUS
+		TOKEN --- TK_EQUAL
+
+----
+----
+
+RULE: STX_MINUS_EQUAL
+-
+	AND
+		TOKEN --- TK_MINUS
+		TOKEN --- TK_EQUAL
+
+----
+----
+
+RULE: STX_STAR_EQUAL
+-
+	AND
+		TOKEN --- TK_STAR
+		TOKEN --- TK_EQUAL
+
+----
+----
+
+RULE: STX_DIV_EQUAL
+-
+	AND
+		TOKEN --- TK_FSLASH
+		TOKEN --- TK_EQUAL
+
+----
+----
+
+RULE: STX_MOD_EQUAL
+-
+	AND
+		TOKEN --- TK_MOD
+		TOKEN --- TK_EQUAL
+
+----
+----
+
+RULE: STX_INCREMENT
+-
+	AND
+		OR
+			SYNTAX --- STX_VAR
+			SYNTAX --- STX_MEMBER
+		TOKEN --- TK_PLUS
+		TOKEN --- TK_PLUS
+
+----
+----
+
+RULE: STX_DECREMENT
+-
+	AND
+		OR
+			SYNTAX --- STX_VAR
+			SYNTAX --- STX_MEMBER
+		TOKEN --- TK_MINUS
+		TOKEN --- TK_MINUS
+
+----
+----
+
+RULE: STX_NEGATE
+-
+	TOKEN --- TK_MINUS
+
+----
+----
+
+RULE: STX_ERROR
+-
+	TOKEN --- TK_ERROR
+
+----
+----
+
