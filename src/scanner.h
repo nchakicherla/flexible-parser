@@ -38,8 +38,6 @@ TOKEN_TYPE identifierType(void);
 Token identifier(void);
 Token scanToken(void);
 char *tokenLabelLookup(TOKEN_TYPE type);
-//TOKEN_TYPE getTKTypeFromLiteral(char *str);
-//TOKEN_TYPE tokenTypeValFromNChars(char* str, size_t n);
 size_t countTokens(char *source, bool *had_error);
 void __printToken(Token *token);
 

@@ -9,14 +9,13 @@
 
 typedef struct s_Parser {
 	GrammarRuleArray grammar;
-	//char *source;
 	size_t n_tokens;
 	Token *tokens;
 	TokenStream tk_stream;
 	SyntaxNode *head;
 	MemPool p;
 	bool is_initialized;
-	bool grammar_set;
+	bool is_grammar_set;
 } Parser;
 
 void initParser(Parser *parser);

@@ -105,7 +105,7 @@ GRAMMAR_TYPE getPrevalentGrammarType(Token *tokens, size_t n) {
 	if(tokens[0].type == TK_LPAREN) return GRM_GROUP;
 	if(tokens[0].type == TK_LSQUARE) return GRM_IFONE;
 	if(tokens[0].type == TK_LBRACE) return GRM_IFMANY;
-	return GRM_AND;
+	return GRM_AND; // and by default
 }
 
 size_t getRuleStartIndex(SYNTAX_TYPE type, Token *tokens, size_t n) {
@@ -118,7 +118,7 @@ size_t getRuleStartIndex(SYNTAX_TYPE type, Token *tokens, size_t n) {
 			}
 		}
 	}
-	return 0;
+	return 1; // returns 0 on error because all rule starts should be at least 2 (STX_XYZ = ...)
 }
 
 size_t countChildren(GRAMMAR_TYPE type, Token *tokens, size_t n) { // should only be called on GRM_AND, GRM_OR
@@ -234,7 +234,7 @@ int fillGrammarNode(RuleNode *node, Token *tokens, size_t n, MemPool *pool) {
 				case GRM_IFONE:
 				case GRM_IFMANY: {
 					node->nested_type.g = grammarType;
-					node->n_children = 1;					
+					node->n_children = 1;
 					node->children = palloc(pool, sizeof(RuleNode));
 					node->children->parent = node;
 					fillGrammarNode(node->children, tokens + 1, n - 2, pool);
@@ -321,16 +321,19 @@ int tryInitGrammarRuleArray(GrammarRuleArray *rule_array, char *fileName, MemPoo
 		rule_array->rules[i].head = palloc(pool, sizeof(RuleNode));
 
 		size_t ruleStart = getRuleStartIndex((SYNTAX_TYPE)i, tokens, n_tokens);
-		if(ruleStart == 0) { // ruleStart should be at least 2 since it's always preceded by "STX_XYZ ="
+		if(ruleStart == 1) { // ruleStart should be at least 2 since it's always preceded by "STX_XYZ ="
 			printf("valid rule start for i = %zu not found\n", i);
 			return 2;
 		}
 
 		size_t semiOffset = getSemicolonOffsetFromRuleStart(&tokens[ruleStart]); // get rule length in Tokens
-		if(tokens[ruleStart].line != tokens[ruleStart + semiOffset].line) {
+		if(tokens[ruleStart].line != tokens[ruleStart + semiOffset].line) { // cursory rule validation, rules must be one line and terminated with semicolon
 			printf("rule start and semicolon not on same line...\n");
 			return 3;
 		}
+
+		// check here if rule is formed correctly, return if not
+		// 
 
 		fillGrammarNode(rule_array->rules[i].head, &tokens[ruleStart], semiOffset, pool);
 		rule_array->rules[i].head->parent = NULL;
@@ -455,4 +458,3 @@ void fPrintGrammarRuleArray(GrammarRuleArray *array, FILE *file) {
 		fPrintGrammarRule(&(array->rules[i]), file);
 	}
 }
-

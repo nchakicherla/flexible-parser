@@ -2,7 +2,6 @@
 #include "scanner.h"
 #include "ast.h"
 #include "file.h"
-//#include "vm.h"
 #include "color.h"
 
 #include "syntax_labels.h"
@@ -20,14 +19,12 @@ void __printNTabs(unsigned int n) {
 	for(unsigned int i = 0; i < n; i++) {
 		putchar('\t');
 	}
-	return;
 }
 
 void __fPrintNTabs(unsigned int n, FILE *file) {
 	for(unsigned int i = 0; i < n; i++) {
 		fputc('\t', file);
 	}
-	return;
 }
 
 static char *syntaxTypeLiteralLookup(SYNTAX_TYPE type) {
@@ -42,7 +39,6 @@ void __printTokens(Token *tokens, size_t n) {
 			tokenLabelLookup(tokens[i].type), 
 			(int)tokens[i].len, tokens[i].start);
 	}
-	return;
 }
 
 void defineParentPtrs(SyntaxNode *node) {
@@ -191,7 +187,7 @@ SyntaxNode *parseGrammar(RuleNode* rnode, TokenStream *stream, MemPool *pool) {
 					return parseOr(rnode, stream, pool);
 				}
 				case GRM_GROUP: {
-					return parseGrammar(rnode->children, stream, pool);
+					return parseGrammar(rnode->children, stream, pool); // () groups are wrapped "GRM_AND"s
 				}
 				case GRM_IFONE: {
 					return parseIfOne(rnode, stream, pool);

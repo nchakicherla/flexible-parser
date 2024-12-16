@@ -7,7 +7,6 @@
 #include "mempool.h"
 #include "scanner.h"
 #include "file.h"
-//#include "syntax_tree.h"
 #include "ast_node.h"
 #include "syntax_types.h"
 #include "grammar.h"
