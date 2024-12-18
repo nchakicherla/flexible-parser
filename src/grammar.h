@@ -52,6 +52,7 @@ typedef struct s_GrammarRuleArray {
 } GrammarRuleArray;
 
 void initRuleNode(RuleNode *node);
+void resetGrammarRuleArray(GrammarRuleArray *array);
 
 size_t getSemicolonOffsetFromRuleStart(Token *tokens);
 RULE_NODE_TYPE getPrevalentType(Token *tokens, size_t n);
@@ -62,7 +63,6 @@ size_t getDelimOffset(GRAMMAR_TYPE type, Token *tokens);
 
 int fillGrammarNode(RuleNode *node, Token *tokens, size_t n, MemPool *pool);
 int populateCyclicalReferences(RuleNode *node, GrammarRuleArray *array);
-//int populateCyclicalReferences(GrammarRuleArray *rule_array);
 int tryInitGrammarRuleArray(GrammarRuleArray *rule_array, char *fileName, MemPool *pool);
 
 void printGrammarNode(RuleNode *node, unsigned int indent);

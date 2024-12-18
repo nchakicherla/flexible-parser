@@ -26,12 +26,12 @@ int main(void) {
 		goto error;
 	}
 
-	if(0 != trySetGrammar(&parser, grammar_file)) {
+	if(0 != trySetParserGrammar(&parser, grammar_file)) {
 		printf("couldn't set grammar...\n");
 		goto error;
 	}
 
-	if(0 != tryScanTokens(&parser, source)) {
+	if(0 != tryScanParserTokens(&parser, source)) {
 		printf("couldn't tokenize...\n");
 		goto error;
 	}

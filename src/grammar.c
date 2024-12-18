@@ -50,6 +50,11 @@ void initRuleNode(RuleNode *node) {
 	node->parent = NULL;
 }
 
+void resetGrammarRuleArray(GrammarRuleArray *array) {
+	array->n_rules = 0;
+	array->rules = NULL;
+}
+
 size_t getSemicolonOffsetFromRuleStart(Token *tokens) {
 	size_t ret = 0;
 	while(tokens[ret].type != TK_SEMICOLON && tokens[ret].type != TK_EOF) {
@@ -320,22 +325,25 @@ int tryInitGrammarRuleArray(GrammarRuleArray *rule_array, char *fileName, MemPoo
 		rule_array->rules[i].stype = i;
 		rule_array->rules[i].head = palloc(pool, sizeof(RuleNode));
 
-		size_t ruleStart = getRuleStartIndex((SYNTAX_TYPE)i, tokens, n_tokens);
+		size_t ruleStart = getRuleStartIndex((SYNTAX_TYPE)i, tokens, n_tokens); // casting i to int assuming n_rules doesn't exceed max
 		if(ruleStart == 1) { // ruleStart should be at least 2 since it's always preceded by "STX_XYZ ="
 			printf("valid rule start for i = %zu not found\n", i);
+			resetGrammarRuleArray(rule_array);
 			return 2;
 		}
 
 		size_t semiOffset = getSemicolonOffsetFromRuleStart(&tokens[ruleStart]); // get rule length in Tokens
 		if(tokens[ruleStart].line != tokens[ruleStart + semiOffset].line) { // cursory rule validation, rules must be one line and terminated with semicolon
 			printf("rule start and semicolon not on same line...\n");
+			resetGrammarRuleArray(rule_array);			
 			return 3;
 		}
 
 		// check here if rule is formed correctly, return if not
 		// 
+		// 1. (?) must be odd number of tokens?
 
-		fillGrammarNode(rule_array->rules[i].head, &tokens[ruleStart], semiOffset, pool);
+		fillGrammarNode(rule_array->rules[i].head, &tokens[ruleStart], semiOffset, pool); // doesn't do any checks!! can stack overflow with malformed, un-checked grammar.txt
 		rule_array->rules[i].head->parent = NULL;
 	}
 	for(size_t i = 0; i < rule_array->n_rules; i++) {

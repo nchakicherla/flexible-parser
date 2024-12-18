@@ -13,7 +13,7 @@ void termParser(Parser *parser) {
 	termMemPool(&parser->p);
 }
 
-int trySetGrammar(Parser *parser, char *grammar_file) {
+int trySetParserGrammar(Parser *parser, char *grammar_file) {
 
 	if(!parser->is_initialized) {
 		return 1;
@@ -28,23 +28,23 @@ int trySetGrammar(Parser *parser, char *grammar_file) {
 	return 0;
 }
 
-int tryScanTokens(Parser *parser, char *source) {
+int tryScanParserTokens(Parser *parser, char *source) {
 
 	if(!parser->is_initialized) {
 		return 1;
 	}
+	/*
 	if(!parser->is_grammar_set) {
 		return 2;
 	}
+	*/
 	if(!source) {
 		return 3;
 	}
 
 	bool scanner_error = false;
 	size_t n_tokens = countTokens(source, &scanner_error);
-	if(!scanner_error) {
-		printf("n_tokens: %zu\n", n_tokens);
-	} else {
+	if(scanner_error) {
 		printf("encountered error token, returning with error code...\n");
 		return 4;
 	}

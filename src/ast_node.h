@@ -10,7 +10,6 @@ typedef struct s_SyntaxNode {
 
 	bool is_token;
 	Token token;
-	size_t n_chars;
 
 	size_t n_children;
 	struct s_SyntaxNode **children;

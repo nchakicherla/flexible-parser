@@ -20,7 +20,7 @@ typedef struct s_Parser {
 
 void initParser(Parser *parser);
 void termParser(Parser *parser);
-int trySetGrammar(Parser *parser, char *grammar_file);
-int tryScanTokens(Parser *parser, char *source);
+int trySetParserGrammar(Parser *parser, char *grammar_file);
+int tryScanParserTokens(Parser *parser, char *source);
 
 #endif // PARSER_H
