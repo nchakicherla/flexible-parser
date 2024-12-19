@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 #define MEMORY_HOG_FACTOR 8
-#define DEF_BLOCK_INIT_SIZE 1024
+#define DEF_BLOCK_SIZE 4096
 
 static Block *newInitBlock(size_t block_size) {
 	
@@ -27,7 +27,7 @@ static Block *newInitBlock(size_t block_size) {
 }
 
 int initMemPool(MemPool *pool) {
-	size_t block_size = DEF_BLOCK_INIT_SIZE;
+	size_t block_size = DEF_BLOCK_SIZE;
 
 	pool->first_block = newInitBlock(block_size);
 
