@@ -27,7 +27,7 @@ char *tryReadFile(char *name, MemPool *pool) {
 	return output;
 }
 
-int writeFileChars(char *name, char *source) {
+int tryWriteChars(char *name, char *source) {
 	FILE *file = NULL;
 
 	file = fopen(name, "w");

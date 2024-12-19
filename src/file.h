@@ -7,7 +7,7 @@
 #include "mempool.h"
 
 char *tryReadFile(char *name, MemPool *pool);
-int writeFileChars(char *name, char *source);
+int tryWriteChars(char *name, char *source);
 FILE *tryFileOpen(char *name, char *mode);
 
 #endif // FILE_H
