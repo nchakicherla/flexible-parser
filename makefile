@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -std=c99 -Wall -Wpedantic -Werror -o3 #-luuid
+CFLAGS = -std=c99 -Wall -Wpedantic -Werror -o3
 OS := $(shell uname)
 
 mkBinDir := $(shell mkdir -p bin)
@@ -34,10 +34,10 @@ run: reset $(BIN)
 $(BIN): $(OBJS) $(MAIN)
 	$(CC) $(CFLAGS) $(OBJS) $(MAIN) -o $(BIN)
 
-./obj/%.o: ./src/%.c ./src/%.h #./src/common.h
+./obj/%.o: ./src/%.c ./src/%.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-./obj/main.o: ./src/main.c #./src/common.h
+./obj/main.o: ./src/main.c
 	$(CC) $(CFLAGS) -c ./src/main.c -o ./obj/main.o
 	
 clear: clear-bin clear-obj
