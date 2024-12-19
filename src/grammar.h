@@ -34,7 +34,7 @@ typedef struct s_RuleNode {
 
 	union u_TargetType nested_type;
 
-	struct s_RuleNode *rule_head;
+	struct s_RuleNode *rule_reference;
 
 	size_t n_children;
 	struct s_RuleNode *children;

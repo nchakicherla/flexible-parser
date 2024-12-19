@@ -44,7 +44,7 @@ static char *syntaxTypeLiteralLookup(SYNTAX_TYPE type) {
 }
 
 void initRuleNode(RuleNode *node) {
-	node->rule_head = NULL;
+	node->rule_reference = NULL;
 	node->n_children = 0;
 	node->children = NULL;
 	node->parent = NULL;
@@ -285,7 +285,7 @@ int populateCyclicalReferences(RuleNode *node, GrammarRuleArray *rule_array) {
 			}
 		}
 		case RULE_STX: {
-			node->rule_head = rule_array->rules[node->nested_type.s].head;
+			node->rule_reference = rule_array->rules[node->nested_type.s].head;
 			break;
 		}
 		case RULE_TK:
@@ -385,7 +385,7 @@ void printGrammarNode(RuleNode *node, unsigned int indent) {
 			__printNTabs(indent);
 			printf("SYNTAX --- %s (%p)\n", 
 				syntaxTypeLiteralLookup(node->nested_type.s),
-				(void *)node->rule_head);
+				(void *)node->rule_reference);
 			break;
 		}
 		case RULE_TK: {

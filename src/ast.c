@@ -149,9 +149,9 @@ SyntaxNode *parseIfMany(RuleNode *rnode, TokenStream *stream, MemPool *pool) {
 }
 
 SyntaxNode *parseSyntax(RuleNode *rnode, TokenStream *stream, MemPool *pool) {
-	SyntaxNode *node = parseGrammar(rnode->rule_head, stream, pool);
+	SyntaxNode *node = parseGrammar(rnode->rule_reference, stream, pool);
 	if(node) {
-		if(node->is_token == true || (rnode->rule_head->node_type == RULE_GRM && rnode->rule_head->nested_type.g == GRM_OR)) {
+		if(node->is_token == true || (rnode->rule_reference->node_type == RULE_GRM && rnode->rule_reference->nested_type.g == GRM_OR)) {
 			SyntaxNode *wrap = wrapNode(node, rnode->nested_type.s, pool);
 			return wrap;
 		} else {
