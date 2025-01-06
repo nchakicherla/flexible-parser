@@ -57,5 +57,9 @@ int tryScanParserTokens(Parser *parser, char *source) {
 		parser->tokens[i] = scanToken();
 	}
 
+	parser->tk_stream.tk = parser->tokens;
+	parser->tk_stream.pos = 0;
+	parser->tk_stream.n = parser->n_tokens;
+	
 	return 0;
 }
