@@ -12,7 +12,7 @@
 int main(void) {
 
 	char *grammar_file = "./resources/grammar.txt";
-	char *test_script = "./resources/script.tl";
+	char *source_file = "./resources/script.tl";
 
 	MemPool scratch;
 	initMemPool(&scratch); // scratch arena for source file contents
@@ -20,7 +20,7 @@ int main(void) {
 	Parser parser = {0}; // initialized to zero for is_initialized flag
 	initParser(&parser);
 
-	char *source = tryReadFile(test_script, &scratch);
+	char *source = tryReadFile(source_file, &scratch);
 	if(!source) {
 		printf("couldn't read file...\n");
 		goto error;
@@ -35,6 +35,8 @@ int main(void) {
 		printf("couldn't tokenize...\n");
 		goto error;
 	}
+
+	printf("successfully tokenized source...\n");
 
 	// try parsing based on a rule in GrammarRuleArray in Parser, or brute-force and check all rules
 	// parsing fails by returning NULL from parseGrammar in ast.c
