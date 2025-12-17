@@ -19,14 +19,14 @@ OBJS = 	./obj/file.o \
 		./obj/grammar.o \
 		./obj/parser.o \
 
-default: reset $(BIN)
+all: reset $(BIN)
 ifeq ($(OS),Darwin) 
 	$(BIN)
 else 
 	valgrind --track-origins=yes --leak-check=full $(BIN)  
 endif
 
-reset: clear $(BIN)
+reset: clean $(BIN)
 
 run: reset $(BIN)
 	$(BIN)
@@ -40,7 +40,7 @@ $(BIN): $(OBJS) $(MAIN)
 ./obj/main.o: ./src/main.c
 	$(CC) $(CFLAGS) -c ./src/main.c -o ./obj/main.o
 	
-clear: clear-bin clear-obj
+clean: clear-bin clear-obj
 
 clear-bin:
 	-rm ./bin/*
