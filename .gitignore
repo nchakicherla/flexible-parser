@@ -6,3 +6,5 @@
 
 # Valgrind
 vgcore*
+
+.idea/
