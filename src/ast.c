@@ -191,20 +191,62 @@ static SyntaxNode *parseNodeInner(const RuleNode *rnode, TokenStream *stream, Me
 	return NULL;
 }
 
-SyntaxNode *parseTokenStream(const Grammar *grammar, TokenStream *stream, MemPool *pool) {
-	const RuleNode *start = grammarRuleFor(grammar, grammar->start);
+SyntaxNode *parseRuleAt(const Grammar *grammar, SYNTAX_TYPE type,
+                        TokenStream *stream, MemPool *pool) {
+	const RuleNode *head = grammarRuleFor(grammar, type);
+	size_t start = stream->pos;
 	SyntaxNode *root;
 
-	if (!start) {
+	if (!head) {
+		return NULL;
+	}
+
+	stream->depth = 0;
+	stream->depth_exceeded = false;
+
+	root = parseNode(head, stream, pool);
+
+	/* A rule made entirely of optionals matches empty. Treating that as a
+	 * failure keeps a caller looping over statements from spinning forever. */
+	if (!root || stream->pos == start) {
+		stream->pos = start;
+		return NULL;
+	}
+	/* Nothing referenced this rule, so its own name has not been applied. */
+	if (root->is_anonymous) {
+		root->type = type;
+		root->is_anonymous = false;
+	}
+	return root;
+}
+
+SyntaxNode *parseWithRule(const Grammar *grammar, SYNTAX_TYPE type,
+                          TokenStream *stream, MemPool *pool) {
+	SyntaxNode *root;
+
+	stream->pos = 0;
+	root = parseRuleAt(grammar, type, stream, pool);
+	if (!root) {
+		return NULL;
+	}
+	/* Trailing junk is a failure, not a success with leftovers. */
+	if (stream->pos < stream->n && stream->tk[stream->pos].type != TK_EOF) {
+		stream->pos = 0;
+		return NULL;
+	}
+	return root;
+}
+
+SyntaxNode *parseTokenStream(const Grammar *grammar, TokenStream *stream, MemPool *pool) {
+	SyntaxNode *root;
+
+	if (!grammarRuleFor(grammar, grammar->start)) {
 		fprintf(stderr, "parse error: grammar has no start rule\n");
 		return NULL;
 	}
 
-	stream->pos = 0;
 	stream->furthest = 0;
-	stream->depth = 0;
-	stream->depth_exceeded = false;
-	root = parseNode(start, stream, pool);
+	root = parseWithRule(grammar, grammar->start, stream, pool);
 
 	if (stream->depth_exceeded) {
 		fprintf(stderr, "parse error: rule nesting exceeded %d levels near line %zu.\n"
@@ -221,21 +263,6 @@ SyntaxNode *parseTokenStream(const Grammar *grammar, TokenStream *stream, MemPoo
 		        at->line, tokenName(grammar->reg, at->type),
 		        (int)at->len, at->start);
 		return NULL;
-	}
-
-	/* Trailing junk is a parse failure, not a success with leftovers. */
-	if (stream->pos < stream->n && stream->tk[stream->pos].type != TK_EOF) {
-		const Token *at = &stream->tk[stream->furthest];
-		fprintf(stderr, "%zu: parse error: unexpected %s \"%.*s\"\n",
-		        at->line, tokenName(grammar->reg, at->type),
-		        (int)at->len, at->start);
-		return NULL;
-	}
-
-	/* The start rule's own name is not applied by any reference, so apply it. */
-	if (root->is_anonymous) {
-		root->type = grammar->start;
-		root->is_anonymous = false;
 	}
 	return root;
 }

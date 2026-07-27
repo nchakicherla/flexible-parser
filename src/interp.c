@@ -30,7 +30,7 @@ typedef struct s_FnEntry {
 	const SyntaxNode *node;
 } FnEntry;
 
-typedef struct s_Interp {
+struct s_Interp {
 	Registry *reg;
 	MemPool *pool;
 
@@ -48,7 +48,7 @@ typedef struct s_Interp {
 	Object ret;
 	int exit_code;
 	unsigned depth;
-} Interp;
+};
 
 static Flow execNode(Interp *in, const SyntaxNode *node);
 static Flow evalNode(Interp *in, const SyntaxNode *node, Object *out);
@@ -1050,33 +1050,81 @@ static void hoistFunctions(Interp *in, const SyntaxNode *node) {
 	}
 }
 
-int runProgram(const SyntaxNode *root, Registry *reg, MemPool *pool, int *out_exit) {
-	Interp in;
+Interp *interpCreate(Registry *reg, MemPool *pool) {
+	Interp *in = pzalloc(pool, sizeof(Interp));
+	in->reg = reg;
+	in->pool = pool;
+	in->ret = objNil();
+	return in;
+}
+
+bool interpIsExpression(const SyntaxNode *node) {
+	if (node->is_token) {
+		return false;
+	}
+	switch (node->type) {
+		case STX_EXPR:
+		case STX_GEXPR:
+		case STX_NUM:
+		case STX_STRLIT:
+		case STX_TRUE:
+		case STX_FALSE:
+		case STX_NIL:
+		case STX_VAR:
+		case STX_FNCALL:
+		case STX_MEMBER:
+		case STX_INDEX:
+		case STX_THIS:
+		case STX_INCREMENT:
+		case STX_DECREMENT:
+			return true;
+		default:
+			return false;
+	}
+}
+
+static ExecResult finish(Interp *in, Flow flow, int *out_exit) {
+	switch (flow) {
+		case FLOW_ERROR:
+			*out_exit = 1;
+			return EXEC_ERROR;
+		case FLOW_EXIT:
+			*out_exit = in->exit_code;
+			return EXEC_EXITED;
+		case FLOW_RETURN:
+			*out_exit = (in->ret.type == I64_TYPE) ? (int)in->ret.val.i64 : 0;
+			return EXEC_OK;
+		default:
+			*out_exit = 0;
+			return EXEC_OK;
+	}
+}
+
+ExecResult interpExec(Interp *in, const SyntaxNode *root, int *out_exit) {
+	return finish(in, execNode(in, root), out_exit);
+}
+
+ExecResult interpExecEcho(Interp *in, const SyntaxNode *root, int *out_exit) {
+	Object value;
 	Flow flow;
 
-	memset(&in, 0, sizeof(in));
-	in.reg = reg;
-	in.pool = pool;
-	in.ret = objNil();
+	if (!interpIsExpression(root)) {
+		return interpExec(in, root, out_exit);
+	}
+
+	flow = evalNode(in, root, &value);
+	if (flow == FLOW_NORMAL && value.type != NIL_TYPE) {
+		objPrint(value);
+		putchar('\n');
+	}
+	return finish(in, flow, out_exit);
+}
+
+int runProgram(const SyntaxNode *root, Registry *reg, MemPool *pool, int *out_exit) {
+	Interp *in = interpCreate(reg, pool);
 
 	if (!root->is_token) {
-		hoistFunctions(&in, root);
+		hoistFunctions(in, root);
 	}
-
-	flow = execNode(&in, root);
-
-	if (flow == FLOW_ERROR) {
-		*out_exit = 1;
-		return 1;
-	}
-	if (flow == FLOW_EXIT) {
-		*out_exit = in.exit_code;
-		return 0;
-	}
-	if (flow == FLOW_RETURN && in.ret.type == I64_TYPE) {
-		*out_exit = (int)in.ret.val.i64;
-		return 0;
-	}
-	*out_exit = 0;
-	return 0;
+	return (interpExec(in, root, out_exit) == EXEC_ERROR) ? 1 : 0;
 }

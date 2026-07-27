@@ -1,7 +1,7 @@
 CC = gcc
 # -O3 was previously written "-o3", which gcc parses as an output-file flag and
 # silently discards, so every build so far was unoptimized.
-CFLAGS = -std=c99 -Wall -Wextra -Wpedantic -Werror -O3
+CFLAGS = -std=c99 -Wall -Wextra -Wpedantic -Werror -O3 -Iexternal/linenoise
 OS := $(shell uname)
 
 mkBinDir := $(shell mkdir -p bin)
@@ -23,6 +23,8 @@ OBJS = 	./obj/file.o \
 		./obj/grammar.o \
 		./obj/parser.o \
 		./obj/interp.o \
+		./obj/repl.o \
+		./obj/linenoise.o \
 
 all: reset $(BIN)
 ifeq ($(OS),Darwin)
@@ -48,6 +50,11 @@ $(BIN): $(OBJS) $(MAIN)
 
 ./obj/main.o: ./src/main.c $(DEFS)
 	$(CC) $(CFLAGS) -c ./src/main.c -o ./obj/main.o
+
+# Vendored third party (see THIRD_PARTY_LICENSES/). linenoise uses termios and
+# ioctl calls that -Wpedantic rejects, and needs _GNU_SOURCE on some platforms.
+./obj/linenoise.o: ./external/linenoise/linenoise.c ./external/linenoise/linenoise.h
+	$(CC) $(filter-out -Wpedantic,$(CFLAGS)) -D_GNU_SOURCE -c $< -o $@
 
 clean: clear-bin clear-obj
 

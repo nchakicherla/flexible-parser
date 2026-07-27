@@ -6,6 +6,7 @@
 #include "interp.h"
 #include "mempool.h"
 #include "parser.h"
+#include "repl.h"
 
 static const char *DEFAULT_GRAMMAR = "./resources/grammar.txt";
 static const char *DEFAULT_SOURCE  = "./resources/script.tl";
@@ -19,6 +20,7 @@ static void usage(void) {
 	printf("  --tokens    print the token stream\n");
 	printf("  --dump-grammar <file>  write the compiled rule trees to a file\n");
 	printf("  --parse-only           skip execution\n");
+	printf("  -i  --repl             start an interactive session\n");
 }
 
 int main(int argc, char **argv) {
@@ -28,6 +30,7 @@ int main(int argc, char **argv) {
 	bool show_ast = false;
 	bool show_tokens = false;
 	bool parse_only = false;
+	bool repl = false;
 
 	MemPool scratch;
 	Parser parser;
@@ -48,6 +51,8 @@ int main(int argc, char **argv) {
 			show_tokens = true;
 		} else if (0 == strcmp(argv[i], "--parse-only")) {
 			parse_only = true;
+		} else if (0 == strcmp(argv[i], "-i") || 0 == strcmp(argv[i], "--repl")) {
+			repl = true;
 		} else if (0 == strcmp(argv[i], "-h") || 0 == strcmp(argv[i], "--help")) {
 			usage();
 			return 0;
@@ -61,13 +66,8 @@ int main(int argc, char **argv) {
 	initMemPool(&scratch);
 	initParser(&parser);
 
-	source = tryReadFile(source_file, &scratch);
-	if (!source) {
-		fprintf(stderr, "could not read source file '%s'\n", source_file);
-		exit_code = 1;
-		goto done;
-	}
-
+	/* The grammar defines the token alphabet, so it is loaded before anything
+	 * is read - including in the repl, which has no source file at all. */
 	status = parserSetGrammar(&parser, grammar_file);
 	if (status != PARSE_OK) {
 		fprintf(stderr, "%s\n", parseStatusMessage(status));
@@ -81,6 +81,18 @@ int main(int argc, char **argv) {
 			fPrintGrammar(&parser.grammar, log);
 			fclose(log);
 		}
+	}
+
+	if (repl) {
+		exit_code = runRepl(&parser, grammar_file);
+		goto done;
+	}
+
+	source = tryReadFile(source_file, &scratch);
+	if (!source) {
+		fprintf(stderr, "could not read source file '%s'\n", source_file);
+		exit_code = 1;
+		goto done;
 	}
 
 	status = parserParseSource(&parser, source);
