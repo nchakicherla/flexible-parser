@@ -1,251 +1,287 @@
-#include "common.h"
-#include "scanner.h"
 #include "ast.h"
-#include "file.h"
 #include "color.h"
 
-#include "syntax_labels.h"
-
 #include <stdio.h>
+#include <string.h>
 
-void __swapSyntaxNodes(SyntaxNode *node1, SyntaxNode *node2) {
-	SyntaxNode tmp;
-	memcpy(&tmp, node1, sizeof(SyntaxNode));
-	memcpy(node1, node2, sizeof(SyntaxNode));
-	memcpy(node2, &tmp, sizeof(SyntaxNode));
+static SyntaxNode *newAnonNode(MemPool *pool) {
+	SyntaxNode *node = palloc(pool, sizeof(SyntaxNode));
+	initSyntaxNode(node);
+	return node;
 }
 
-void __printNTabs(unsigned int n) {
-	for(unsigned int i = 0; i < n; i++) {
-		putchar('\t');
-	}
-}
-
-void __fPrintNTabs(unsigned int n, FILE *file) {
-	for(unsigned int i = 0; i < n; i++) {
-		fputc('\t', file);
-	}
-}
-
-static char *syntaxTypeLiteralLookup(SYNTAX_TYPE type) {
-	return syntax_labels[type];
-}
-
-void __printTokens(Token *tokens, size_t n) {
-	for(size_t i = 0; i < n; i++) {
-		printf("LINE: %6zu TK%6zu: TYPE: %16s - \"%.*s\"\n", 
-			tokens[i].line,
-			i,
-			tokenLabelLookup(tokens[i].type), 
-			(int)tokens[i].len, tokens[i].start);
-	}
-}
-
-void defineParentPtrs(SyntaxNode *node) {
-	for(size_t i = 0; i < node->n_children; i++) {
-		node->children[i]->parent = node;
-		if(false == node->children[i]->is_token) {
-			defineParentPtrs(node->children[i]);
-		}
-	}
-}
-
-void addChild(SyntaxNode *parent, SyntaxNode *child, MemPool *pool) {
-	if(parent->n_children == 0) {
+static void addChild(SyntaxNode *parent, SyntaxNode *child, MemPool *pool) {
+	if (parent->n_children == 0) {
 		parent->children = palloc(pool, sizeof(SyntaxNode *));
 	} else {
-		SyntaxNode **new_array = pGrowAlloc(parent->children, parent->n_children * sizeof(SyntaxNode *), (parent->n_children + 1) * sizeof(SyntaxNode *), pool);
-		parent->children = new_array;
+		parent->children = pGrowAlloc(parent->children,
+		                              parent->n_children * sizeof(SyntaxNode *),
+		                              (parent->n_children + 1) * sizeof(SyntaxNode *),
+		                              pool);
 	}
 	parent->children[parent->n_children] = child;
 	parent->n_children++;
+	child->parent = parent;
 }
 
-SyntaxNode *wrapNode(SyntaxNode *child, SYNTAX_TYPE stype, MemPool *pool) {
-	SyntaxNode *parent = palloc(pool, sizeof(SyntaxNode));
-	initSyntaxNode(parent);
+/* Anonymous nodes are grouping artifacts, not structure the caller asked for,
+ * so their children are hoisted into the parent instead of nesting. Doing this
+ * at every append keeps the tree flat by construction - the old code had to
+ * special-case the splice in three different places. */
+static void appendResult(SyntaxNode *parent, SyntaxNode *child, MemPool *pool) {
+	if (child->is_anonymous && !child->is_token) {
+		for (size_t i = 0; i < child->n_children; i++) {
+			appendResult(parent, child->children[i], pool);
+		}
+		return;
+	}
+	addChild(parent, child, pool);
+}
 
+static SyntaxNode *wrapNode(SyntaxNode *child, SYNTAX_TYPE stype, MemPool *pool) {
+	SyntaxNode *parent = newAnonNode(pool);
 	parent->type = stype;
-	parent->children = palloc(pool, sizeof(SyntaxNode*));
-	parent->children[0] = child;
-	parent->n_children = 1;
+	parent->is_anonymous = false;
+	addChild(parent, child, pool);
 	return parent;
 }
 
-SyntaxNode *parseAnd(RuleNode *rnode, TokenStream *stream, MemPool *pool) {
-	SyntaxNode *node = palloc(pool, sizeof(SyntaxNode));
-	initSyntaxNode(node);
-	size_t start_pos = stream->pos;
+static SyntaxNode *parseTerminal(const RuleNode *rnode, TokenStream *stream, MemPool *pool) {
+	SyntaxNode *node;
 
-	for(size_t i = 0; i < rnode->n_children; i++) {
-		SyntaxNode *child = parseGrammar(&rnode->children[i], stream, pool);
-		if(!child) {
-			if(rnode->children[i].node_type == RULE_GRM && ( 
-				rnode->children[i].nested_type.g == GRM_IFONE ||
-				rnode->children[i].nested_type.g == GRM_IFMANY)
-			) {
-				continue;
-			}
-			stream->pos = start_pos;
+	if (stream->pos > stream->furthest) {
+		stream->furthest = stream->pos;
+	}
+	if (stream->tk[stream->pos].type != rnode->as.t) {
+		return NULL;
+	}
+
+	node = newAnonNode(pool);
+	node->is_token = true;
+	node->token = stream->tk[stream->pos];
+	stream->pos++;
+	return node;
+}
+
+/* A rule reference names whatever its body produced. If the body already came
+ * back named - or is a bare token - renaming it would destroy that name, so it
+ * gets wrapped instead. */
+static SyntaxNode *parseRuleRef(const RuleNode *rnode, TokenStream *stream, MemPool *pool) {
+	SyntaxNode *node = parseNode(rnode->rule_reference, stream, pool);
+
+	if (!node) {
+		return NULL;
+	}
+	if (node->is_token || !node->is_anonymous) {
+		return wrapNode(node, rnode->as.s, pool);
+	}
+	node->type = rnode->as.s;
+	node->is_anonymous = false;
+	return node;
+}
+
+static SyntaxNode *parseSequence(const RuleNode *rnode, TokenStream *stream, MemPool *pool) {
+	SyntaxNode *node = newAnonNode(pool);
+	size_t start = stream->pos;
+
+	for (size_t i = 0; i < rnode->n_children; i++) {
+		SyntaxNode *child = parseNode(rnode->children[i], stream, pool);
+		if (!child) {
+			stream->pos = start;
 			return NULL;
 		}
-
-		if(child->type == STX_ERROR && child->is_token == false) {
-			if(rnode->children[i].nested_type.g == GRM_IFONE) {
-				if((rnode->children[i].children[0].node_type == RULE_GRM &&
-					rnode->children[i].children[0].nested_type.g == GRM_OR)
-
-					|| rnode->children[i].children[0].node_type == RULE_STX) {
-					addChild(node, child, pool);
-					continue;
-				}
-			}
-			for(size_t j = 0; j < child->n_children; j++) {
-				addChild(node, child->children[j], pool);
-			}
-			continue;
-		}
-		addChild(node, child, pool);
+		appendResult(node, child, pool);
 	}
 	return node;
 }
 
-SyntaxNode *parseOr(RuleNode *rnode, TokenStream *stream, MemPool *pool) {
-	for(size_t i = 0; i < rnode->n_children; i++) {
-		SyntaxNode *node = parseGrammar(&rnode->children[i], stream, pool);
-		if(node) {
-			return node;
+static SyntaxNode *parseAlternation(const RuleNode *rnode, TokenStream *stream, MemPool *pool) {
+	size_t start = stream->pos;
+
+	for (size_t i = 0; i < rnode->n_children; i++) {
+		SyntaxNode *child;
+		stream->pos = start;
+		child = parseNode(rnode->children[i], stream, pool);
+		if (child) {
+			return child;
 		}
 	}
+	stream->pos = start;
 	return NULL;
 }
 
-SyntaxNode *parseIfOne(RuleNode *rnode, TokenStream *stream, MemPool *pool) {
-	return parseGrammar(rnode->children, stream, pool);
+/* Optional and repeated groups never fail - they match empty. Because of that,
+ * a sequence can treat any NULL child as a hard failure, which is what removes
+ * the nest of "was this child optional?" checks from the old parseAnd. */
+static SyntaxNode *parseOptional(const RuleNode *rnode, TokenStream *stream, MemPool *pool) {
+	size_t start = stream->pos;
+	SyntaxNode *child = parseNode(rnode->children[0], stream, pool);
+
+	if (!child) {
+		stream->pos = start;
+		return newAnonNode(pool);
+	}
+	return child;
 }
 
-SyntaxNode *parseIfMany(RuleNode *rnode, TokenStream *stream, MemPool *pool) {
-	SyntaxNode *node = palloc(pool, sizeof(SyntaxNode));
-	initSyntaxNode(node);
-	size_t reset = stream->pos;
-	
-	while(true) {
-		reset = stream->pos;
-		SyntaxNode *child = parseGrammar(rnode->children, stream, pool);
-		if(child) {
-			if(rnode->children[0].node_type == RULE_GRM && rnode->children[0].nested_type.g == GRM_AND) {
-				for(size_t i = 0; i < child->n_children; i++) {
-					addChild(node, child->children[i], pool);
-				}
-			} else {
-				addChild(node, child, pool);
-			}
-		} else {
+static SyntaxNode *parseRepetition(const RuleNode *rnode, TokenStream *stream, MemPool *pool) {
+	SyntaxNode *node = newAnonNode(pool);
+
+	while (true) {
+		size_t reset = stream->pos;
+		SyntaxNode *child = parseNode(rnode->children[0], stream, pool);
+
+		if (!child) {
 			stream->pos = reset;
 			break;
 		}
-	}
-	return node;
-}
-
-SyntaxNode *parseSyntax(RuleNode *rnode, TokenStream *stream, MemPool *pool) {
-	SyntaxNode *node = parseGrammar(rnode->rule_reference, stream, pool);
-	if(node) {
-		if(node->is_token == true || (rnode->rule_reference->node_type == RULE_GRM && rnode->rule_reference->nested_type.g == GRM_OR)) {
-			SyntaxNode *wrap = wrapNode(node, rnode->nested_type.s, pool);
-			return wrap;
-		} else {
-			node->type = rnode->nested_type.s;
-		}
-	} else {
-		return NULL;
-	}
-	return node;
-}
-
-SyntaxNode *parseToken(RuleNode *rnode, TokenStream *stream, MemPool *pool) {
-	if(stream->tk[stream->pos].type == rnode->nested_type.t) {
-		SyntaxNode *node = palloc(pool, sizeof(SyntaxNode));
-		initSyntaxNode(node);
-		node->is_token = true;
-		memcpy(&node->token, &stream->tk[stream->pos], sizeof(Token));
-		stream->pos++;
-		return node;
-	} else {
-		return NULL;
-	}
-}
-
-SyntaxNode *parseGrammar(RuleNode* rnode, TokenStream *stream, MemPool *pool) {
-	switch(rnode->node_type) {
-		case RULE_GRM: {
-			switch(rnode->nested_type.g) {
-				case GRM_AND: {
-					return parseAnd(rnode, stream, pool);
-				}
-				case GRM_OR: {
-					return parseOr(rnode, stream, pool);
-				}
-				case GRM_GROUP: {
-					return parseGrammar(rnode->children, stream, pool); // () groups are wrapped "GRM_AND"s
-				}
-				case GRM_IFONE: {
-					return parseIfOne(rnode, stream, pool);
-				}
-				case GRM_IFMANY: {
-					return parseIfMany(rnode, stream, pool);
-				}
-				default: {
-					printf("GRM_* not recognized...\n");
-					return NULL;
-				}
-			}
-		}
-		case RULE_STX: {
-			return parseSyntax(rnode, stream, pool);	
-		}
-		case RULE_TK: {
-			return parseToken(rnode, stream, pool);
-		}
-		default:
-			printf("RULE_* not recognized...\n");
+		/* A body that can match empty (say, a group of optionals) would spin
+		 * here forever. Consuming nothing ends the repetition. */
+		if (stream->pos == reset) {
 			break;
+		}
+		appendResult(node, child, pool);
+	}
+	return node;
+}
+
+/* A rule that can reach itself without consuming a token - `A = A, b ;` and
+ * friends - recurses forever. Recursive descent cannot parse left recursion at
+ * all, so the only question is whether it reports that or blows the C stack.
+ * The limit is far above any legitimate nesting depth. */
+#define MAX_PARSE_DEPTH 1024
+
+static SyntaxNode *parseNodeInner(const RuleNode *rnode, TokenStream *stream, MemPool *pool);
+
+SyntaxNode *parseNode(const RuleNode *rnode, TokenStream *stream, MemPool *pool) {
+	SyntaxNode *result;
+
+	/* Once the limit is hit, abandon the whole parse rather than just this
+	 * branch. Failing one branch would send alternation off to try the next
+	 * one, which recurses just as deep - the search explodes and the arena
+	 * grows until the process is killed. */
+	if (stream->depth_exceeded) {
+		return NULL;
+	}
+	if (stream->depth >= MAX_PARSE_DEPTH) {
+		stream->depth_exceeded = true;
+		return NULL;
+	}
+	stream->depth++;
+	result = parseNodeInner(rnode, stream, pool);
+	stream->depth--;
+	return result;
+}
+
+static SyntaxNode *parseNodeInner(const RuleNode *rnode, TokenStream *stream, MemPool *pool) {
+	switch (rnode->kind) {
+		case RULE_GRM:
+			switch (rnode->as.g) {
+				case GRM_SEQ:    return parseSequence(rnode, stream, pool);
+				case GRM_ALT:    return parseAlternation(rnode, stream, pool);
+				case GRM_OPT:    return parseOptional(rnode, stream, pool);
+				case GRM_REPEAT: return parseRepetition(rnode, stream, pool);
+			}
+			return NULL;
+		case RULE_STX:
+			return parseRuleRef(rnode, stream, pool);
+		case RULE_TK:
+			return parseTerminal(rnode, stream, pool);
 	}
 	return NULL;
 }
 
-void printTokenStream(TokenStream *stream) {
-	for(size_t i = 0; i < stream->n; i++) {
-		printf("LINE: %6zu TK%6zu: TYPE: %16s - \"%.*s\"\n", 
-			stream->tk[i].line,
-			i,
-			tokenLabelLookup(stream->tk[i].type), 
-			(int)stream->tk[i].len, stream->tk[i].start);
+SyntaxNode *parseTokenStream(const Grammar *grammar, TokenStream *stream, MemPool *pool) {
+	const RuleNode *start = grammarRuleFor(grammar, grammar->start);
+	SyntaxNode *root;
+
+	if (!start) {
+		fprintf(stderr, "parse error: grammar has no start rule\n");
+		return NULL;
+	}
+
+	stream->pos = 0;
+	stream->furthest = 0;
+	stream->depth = 0;
+	stream->depth_exceeded = false;
+	root = parseNode(start, stream, pool);
+
+	if (stream->depth_exceeded) {
+		fprintf(stderr, "parse error: rule nesting exceeded %d levels near line %zu.\n"
+		                "  This usually means a left-recursive rule (one that can reach\n"
+		                "  itself without consuming a token). Recursive descent cannot\n"
+		                "  parse left recursion; rewrite the rule using {} repetition.\n",
+		        MAX_PARSE_DEPTH, stream->tk[stream->furthest].line);
+		return NULL;
+	}
+
+	if (!root) {
+		const Token *at = &stream->tk[stream->furthest];
+		fprintf(stderr, "%zu: parse error: unexpected %s \"%.*s\"\n",
+		        at->line, tokenName(grammar->reg, at->type),
+		        (int)at->len, at->start);
+		return NULL;
+	}
+
+	/* Trailing junk is a parse failure, not a success with leftovers. */
+	if (stream->pos < stream->n && stream->tk[stream->pos].type != TK_EOF) {
+		const Token *at = &stream->tk[stream->furthest];
+		fprintf(stderr, "%zu: parse error: unexpected %s \"%.*s\"\n",
+		        at->line, tokenName(grammar->reg, at->type),
+		        (int)at->len, at->start);
+		return NULL;
+	}
+
+	/* The start rule's own name is not applied by any reference, so apply it. */
+	if (root->is_anonymous) {
+		root->type = grammar->start;
+		root->is_anonymous = false;
+	}
+	return root;
+}
+
+/* --- debug output -------------------------------------------------------- */
+
+void fPrintSyntaxNode(Registry *reg, const SyntaxNode *node, unsigned indent, FILE *file) {
+	for (unsigned i = 0; i < indent; i++) {
+		fputc('\t', file);
+	}
+
+	if (node->is_token) {
+		fprintf(file, "- %s \"%.*s\"\n",
+		        tokenName(reg, node->token.type),
+		        (int)node->token.len, node->token.start);
+		return;
+	}
+
+	fprintf(file, "- /%s\n", syntaxName(reg, node->type));
+	for (size_t i = 0; i < node->n_children; i++) {
+		fPrintSyntaxNode(reg, node->children[i], indent + 1, file);
 	}
 }
 
-void printSyntaxNode(SyntaxNode *node, unsigned int indent) {
-	if(node->is_token == true) {
-		__printNTabs(indent);
+void printSyntaxNode(Registry *reg, const SyntaxNode *node, unsigned indent) {
+	for (unsigned i = 0; i < indent; i++) {
+		putchar('\t');
+	}
+
+	if (node->is_token) {
 		printf("- ");
-
 		setColor(ANSI_GREEN);
-		printf("%s ", tokenLabelLookup(node->token.type));
+		printf("%s ", tokenName(reg, node->token.type));
 		resetColor();
-
 		setColor(ANSI_YELLOW);
 		printf("%.*s\n", (int)node->token.len, node->token.start);
 		resetColor();
 		return;
 	}
-	__printNTabs(indent);
-	printf("- ");
 
+	printf("- ");
 	setColor(ANSI_CYAN);
-	printf("/%s\n", syntaxTypeLiteralLookup(node->type));
+	printf("/%s\n", syntaxName(reg, node->type));
 	resetColor();
 
-	for(size_t i = 0; i < node->n_children; i++) {
-		printSyntaxNode(node->children[i], indent + 1);
+	for (size_t i = 0; i < node->n_children; i++) {
+		printSyntaxNode(reg, node->children[i], indent + 1);
 	}
 }

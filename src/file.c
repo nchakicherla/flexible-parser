@@ -1,48 +1,56 @@
 #include "file.h"
 
-char *tryReadFile(char *name, MemPool *pool) {
+char *tryReadFile(const char *name, MemPool *pool) {
 	FILE *file = NULL;
 	char *output = NULL;
 	long size;
+	size_t read;
 
-	file = fopen(name, "r");
-	if (!file)
+	if (!pool) {
 		return NULL;
+	}
+
+	file = fopen(name, "rb");
+	if (!file) {
+		return NULL;
+	}
 
 	// get length of file as size, then rewind pointer
 	fseek(file, 0, SEEK_END);
 	size = ftell(file);
 	fseek(file, 0, SEEK_SET);
-	
-	if(pool) {
-		output = palloc(pool, size + 1);
-	} else {
+
+	if (size < 0) {
 		fclose(file);
 		return NULL;
 	}
-	fread(output, size, 1, file);
-	output[size] = '\0';
+
+	output = palloc(pool, (size_t)size + 1);
+
+	// an empty file is legitimate; fread returning 0 is only an error when
+	// there was something to read
+	read = fread(output, 1, (size_t)size, file);
+	output[read] = '\0';
 
 	fclose(file);
 	return output;
 }
 
-int tryWriteChars(char *name, char *source) {
+int tryWriteChars(const char *name, const char *source) {
 	FILE *file = NULL;
 
 	file = fopen(name, "w");
-	if(!file) return 1;
+	if (!file) return 1;
 
 	fprintf(file, "%s", source);
 	fclose(file);
 	return 0;
 }
 
-FILE *tryFileOpen(char *name, char *mode) {
+FILE *tryFileOpen(const char *name, const char *mode) {
 	FILE *fp = NULL;
-	if(!(fp = fopen(name, mode))) {
+	if (!(fp = fopen(name, mode))) {
 		return NULL;
 	}
 	return fp;
 }
-

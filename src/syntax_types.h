@@ -1,33 +1,24 @@
 #ifndef SYNTAX_TYPES_H
 #define SYNTAX_TYPES_H
 
-typedef enum {
-	STX_SCOPE = 1, STX_CLASS, STX_FNDEF, STX_IF, STX_WHILE,
-	STX_FOR, STX_FORRANGE, STX_SWITCH, STX_CASE,
+/* The syntax vocabulary is generated from syntax.def. Values start at 0 and
+ * are dense, so they index the registry's name table directly - the previous
+ * enum-starts-at-1 / labels-start-at-0 mismatch is structurally impossible now.
+ *
+ * SYNTAX_TYPE is a plain int rather than a bare enum because grammar files can
+ * mint additional names that get IDs at or above STX__COUNT. */
 
-	STX_INIT, STX_DECLARE, STX_ASSIGN, STX_ECHO, STX_BREAK,
-	STX_RETURN, STX_EXIT,
+enum {
+#define STX(name) name,
+#include "syntax.def"
+#undef STX
+	STX__COUNT
+};
 
-	STX_GEXPR, STX_EXPR,
+typedef int SYNTAX_TYPE;
 
-	STX_VTYPE, STX_VAR, STX_MEMBER, STX_THIS,STX_INDEX, STX_FNCALL,
-	STX_NUM, STX_STRLIT, STX_NIL,
-
-	STX_ARITHOP, STX_BOOLOP, STX_ASSIGNOP,
-
-	STX_MULT, STX_DIV, STX_SUM, STX_DIFF, STX_MOD,
-
-	STX_TRUE, STX_FALSE, STX_AND, STX_OR, STX_NOT, STX_GREATER,
-	STX_LESS, STX_EQUAL_EQUAL, STX_NOT_EQUAL, STX_GREATER_EQUAL, STX_LESS_EQUAL,
-
-	STX_RARROW,
-
-	STX_EQUAL, STX_PLUS_EQUAL, STX_MINUS_EQUAL, STX_STAR_EQUAL, STX_DIV_EQUAL,
-	STX_MOD_EQUAL,
-
-	STX_INCREMENT, STX_DECREMENT, STX_NEGATE,
-
-	STX_ERROR,
-} SYNTAX_TYPE;
+/* "not a syntax type" - used for anonymous grouping nodes that carry no name.
+ * Distinct from STX_ERROR, which is a real rule in the grammar. */
+#define STX__NONE (-1)
 
 #endif // SYNTAX_TYPES_H

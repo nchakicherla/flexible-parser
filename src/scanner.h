@@ -1,44 +1,44 @@
 #ifndef SCANNER_H
 #define SCANNER_H
 
-#include <stdbool.h>
-#include <stdlib.h>
-#include <string.h>
+/* scanner.h - lexical analysis.
+ *
+ * The scanner holds no global state: every entry point takes a Scanner*, so
+ * several sources (a grammar file and a script, say) can be scanned
+ * independently. Keyword and punctuation recognition is driven entirely by the
+ * Registry rather than hand-written switches, which is what lets a grammar file
+ * introduce tokens the scanner has never heard of.
+ */
 
+#include "common.h"
+#include "mempool.h"
+#include "registry.h"
 #include "token_types.h"
-
-typedef struct s_Scanner {
-	char *start;
-	char *current;
-	size_t line;
-} Scanner;
 
 typedef struct s_Token {
 	TOKEN_TYPE type;
-	char *start;
+	const char *start;
 	size_t len;
 	size_t line;
 } Token;
 
-void initScanner(char *source);
-bool isAtEnd(void);
-char advance(void);
-char peek(void);
-char peekNext(void);
-bool match(char expect);
-Token makeToken(TOKEN_TYPE type);
-Token makeErrorToken(char *message);
-void skipWhitespace(void);
-Token string(void);
-bool isDigit(char c);
-Token number(void);
-bool isAlpha(char c);
-TOKEN_TYPE checkKeyword(size_t start, size_t len, char *rest, TOKEN_TYPE type);
-TOKEN_TYPE identifierType(void);
-Token identifier(void);
-Token scanToken(void);
-char *tokenLabelLookup(TOKEN_TYPE type);
-size_t countTokens(char *source, bool *had_error);
-void __printToken(Token *token);
+typedef struct s_Scanner {
+	const char *start;
+	const char *current;
+	size_t line;
+	Registry *reg;
+} Scanner;
+
+void initScanner(Scanner *sc, const char *source, Registry *reg);
+Token scanToken(Scanner *sc);
+
+/* Scans the whole source into a pool-allocated array in one pass. On success
+ * returns the array and writes the count to out_n. On a malformed token returns
+ * NULL and, if out_err is non-NULL, writes the offending token there so the
+ * caller can report a line number. */
+Token *tokenizeAll(const char *source, Registry *reg, MemPool *pool,
+                   size_t *out_n, Token *out_err);
+
+void printToken(Registry *reg, const Token *token);
 
 #endif // SCANNER_H

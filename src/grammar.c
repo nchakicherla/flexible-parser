@@ -1,468 +1,486 @@
-#include "common.h"
 #include "grammar.h"
-#include "syntax_types.h"
-#include "syntax_labels.h"
-#include "scanner.h"
-#include "token_labels.h"
-#include "mempool.h"
 #include "file.h"
 
 #include <stdio.h>
+#include <string.h>
 
-static SYNTAX_TYPE getSNodeTypeFromLiteral(char *str) {
-	for (size_t i = 0; i < (sizeof(syntax_labels) / sizeof(char *)); i++) {
-		if(0 == strcmp(str, syntax_labels[i])) {
-			return i;
+/* Cheap insurance against a pathological or malicious grammar file recursing
+ * the C stack to death. The deepest rule in a realistic grammar is well under
+ * a dozen levels. */
+#define MAX_GRAMMAR_DEPTH 256
+
+typedef struct s_GParser {
+	Token *tk;
+	size_t n;
+	size_t pos;
+	Registry *reg;
+	MemPool *pool;
+	const char *filename;
+	unsigned depth;
+	bool had_error;
+} GParser;
+
+typedef struct s_NodeList {
+	RuleNode **items;
+	size_t n;
+	size_t cap;
+} NodeList;
+
+typedef struct s_PendingRule {
+	SYNTAX_TYPE stype;
+	RuleNode *head;
+	size_t line;
+} PendingRule;
+
+typedef struct s_RuleList {
+	PendingRule *items;
+	size_t n;
+	size_t cap;
+} RuleList;
+
+/* --- token cursor -------------------------------------------------------- */
+
+/* Safe unconditionally: tokenizeAll always terminates the array with TK_EOF and
+ * advance() refuses to step past it, so cur() can never run off the end. This
+ * is what replaces the unbounded `while(true)` scans in the old builder. */
+static Token *cur(GParser *gp) {
+	return &gp->tk[gp->pos];
+}
+
+static bool check(GParser *gp, TOKEN_TYPE type) {
+	return cur(gp)->type == type;
+}
+
+static void advance(GParser *gp) {
+	if (gp->tk[gp->pos].type != TK_EOF) {
+		gp->pos++;
+	}
+}
+
+static bool match(GParser *gp, TOKEN_TYPE type) {
+	if (check(gp, type)) {
+		advance(gp);
+		return true;
+	}
+	return false;
+}
+
+static void gerror(GParser *gp, const Token *at, const char *msg) {
+	gp->had_error = true;
+	fprintf(stderr, "%s:%zu: grammar error: %s (near \"%.*s\")\n",
+	        gp->filename, at->line, msg, (int)at->len, at->start);
+}
+
+/* --- growable arrays ----------------------------------------------------- */
+
+static void nodeListPush(NodeList *list, RuleNode *node, MemPool *pool) {
+	if (list->n == list->cap) {
+		size_t new_cap = (list->cap == 0) ? 8 : list->cap * 2;
+		list->items = pGrowAlloc(list->items, list->cap * sizeof(RuleNode *),
+		                         new_cap * sizeof(RuleNode *), pool);
+		list->cap = new_cap;
+	}
+	list->items[list->n++] = node;
+}
+
+static void ruleListPush(RuleList *list, PendingRule rule, MemPool *pool) {
+	if (list->n == list->cap) {
+		size_t new_cap = (list->cap == 0) ? 64 : list->cap * 2;
+		list->items = pGrowAlloc(list->items, list->cap * sizeof(PendingRule),
+		                         new_cap * sizeof(PendingRule), pool);
+		list->cap = new_cap;
+	}
+	list->items[list->n++] = rule;
+}
+
+static RuleNode *newNode(GParser *gp, RULE_NODE_TYPE kind) {
+	RuleNode *node = pzalloc(gp->pool, sizeof(RuleNode));
+	node->kind = kind;
+	return node;
+}
+
+static RuleNode *newComposite(GParser *gp, GRAMMAR_TYPE g, NodeList *children) {
+	RuleNode *node = newNode(gp, RULE_GRM);
+	node->as.g = g;
+	node->children = children->items;
+	node->n_children = children->n;
+	for (size_t i = 0; i < children->n; i++) {
+		children->items[i]->parent = node;
+	}
+	return node;
+}
+
+/* --- the rule expression parser -----------------------------------------
+ *
+ * Three mutually recursive functions, one pass, no rescanning and no bracket
+ * depth counters - recursion tracks nesting for free. This replaces
+ * getPrevalentType, getPrevalentGrammarType, countChildren, getDelimOffset,
+ * getSemicolonOffsetFromRuleStart and fillGrammarNode.
+ *
+ * Precedence follows conventional EBNF: parseAlt sits above parseSeq, so '|'
+ * binds looser than ',' and a rule body is an alternation of sequences. In
+ * recursive descent the outermost function handles the loosest operator, so
+ * swapping these two calls is all it would take to change the convention.
+ */
+
+static RuleNode *parseAlt(GParser *gp);
+
+static RuleNode *parseAtom(GParser *gp) {
+	Token *t = cur(gp);
+
+	if (t->type == TK_LPAREN || t->type == TK_LSQUARE || t->type == TK_LBRACE) {
+		TOKEN_TYPE open = t->type;
+		TOKEN_TYPE close = (open == TK_LPAREN)  ? TK_RPAREN
+		                 : (open == TK_LSQUARE) ? TK_RSQUARE
+		                                        : TK_RBRACE;
+		RuleNode *inner;
+		NodeList one = {0};
+
+		if (++gp->depth > MAX_GRAMMAR_DEPTH) {
+			gerror(gp, t, "grammar nested too deeply");
+			return NULL;
+		}
+		advance(gp);
+		inner = parseAlt(gp); /* brackets re-enter at the loosest level */
+		gp->depth--;
+
+		if (!inner) {
+			return NULL;
+		}
+		if (!match(gp, close)) {
+			gerror(gp, cur(gp), "unclosed group");
+			return NULL;
+		}
+
+		/* '(' ')' is grouping only - it exists to override precedence and
+		 * leaves no trace in the rule tree. */
+		if (open == TK_LPAREN) {
+			return inner;
+		}
+
+		nodeListPush(&one, inner, gp->pool);
+		return newComposite(gp, (open == TK_LSQUARE) ? GRM_OPT : GRM_REPEAT, &one);
+	}
+
+	if (t->type == TK_IDENTIFIER) {
+		TOKEN_TYPE as_token = registryFindToken(gp->reg, t->start, t->len);
+		RuleNode *node;
+
+		advance(gp);
+
+		/* A name the registry knows as a token is a terminal; anything else is
+		 * a rule reference, interned on first sight. Names that are referenced
+		 * but never defined are caught after the whole file is read. */
+		if (as_token != TK__NONE) {
+			node = newNode(gp, RULE_TK);
+			node->as.t = as_token;
+		} else {
+			node = newNode(gp, RULE_STX);
+			node->as.s = registryInternSyntax(gp->reg, t->start, t->len);
+		}
+		return node;
+	}
+
+	gerror(gp, t, "expected a token name, rule name, or group");
+	return NULL;
+}
+
+static RuleNode *parseSeq(GParser *gp) {
+	RuleNode *first = parseAtom(gp);
+	NodeList list = {0};
+
+	if (!first || !check(gp, TK_COMMA)) {
+		return first;
+	}
+
+	nodeListPush(&list, first, gp->pool);
+	while (match(gp, TK_COMMA)) {
+		RuleNode *next = parseAtom(gp);
+		if (!next) {
+			return NULL;
+		}
+		nodeListPush(&list, next, gp->pool);
+	}
+	return newComposite(gp, GRM_SEQ, &list);
+}
+
+static RuleNode *parseAlt(GParser *gp) {
+	RuleNode *first = parseSeq(gp);
+	NodeList list = {0};
+
+	if (!first || !check(gp, TK_PIPE)) {
+		return first;
+	}
+
+	nodeListPush(&list, first, gp->pool);
+	while (match(gp, TK_PIPE)) {
+		RuleNode *next = parseSeq(gp);
+		if (!next) {
+			return NULL;
+		}
+		nodeListPush(&list, next, gp->pool);
+	}
+	return newComposite(gp, GRM_ALT, &list);
+}
+
+/* --- directives ---------------------------------------------------------- */
+
+static bool tokenTextIs(const Token *t, const char *word) {
+	return t->len == strlen(word) && 0 == memcmp(t->start, word, t->len);
+}
+
+/* '#token' NAME "lexeme" ';'  or  '#keyword' NAME "lexeme" ';'
+ *
+ * This is what makes a new vocabulary usable rather than merely nameable: the
+ * scanner's tables are built from the registry, so a token declared here is
+ * scannable in the source file immediately. */
+static bool parseDirective(GParser *gp) {
+	Token *kind;
+	Token *name;
+	Token *lexeme;
+	const char *lex;
+	size_t lex_len;
+	TOKEN_TYPE added;
+
+	advance(gp); /* '#' */
+
+	if (!check(gp, TK_IDENTIFIER)) {
+		gerror(gp, cur(gp), "expected 'token' or 'keyword' after '#'");
+		return false;
+	}
+	kind = cur(gp);
+	advance(gp);
+
+	if (!check(gp, TK_IDENTIFIER)) {
+		gerror(gp, cur(gp), "expected a token name");
+		return false;
+	}
+	name = cur(gp);
+	advance(gp);
+
+	if (!check(gp, TK_CHARS)) {
+		gerror(gp, cur(gp), "expected a quoted lexeme");
+		return false;
+	}
+	lexeme = cur(gp);
+	advance(gp);
+
+	if (!match(gp, TK_SEMICOLON)) {
+		gerror(gp, cur(gp), "expected ';' after directive");
+		return false;
+	}
+
+	lex = lexeme->start + 1; /* strip the quotes the scanner kept */
+	lex_len = lexeme->len - 2;
+
+	if (tokenTextIs(kind, "token")) {
+		added = registryAddPunct(gp->reg, name->start, name->len, lex, lex_len);
+		if (added == TK__NONE) {
+			gerror(gp, name, "duplicate token name, or lexeme is not 1-2 characters");
+			return false;
+		}
+	} else if (tokenTextIs(kind, "keyword")) {
+		added = registryAddKeyword(gp->reg, name->start, name->len, lex, lex_len);
+		if (added == TK__NONE) {
+			gerror(gp, name, "duplicate token name, or empty lexeme");
+			return false;
+		}
+	} else {
+		gerror(gp, kind, "unknown directive, expected 'token' or 'keyword'");
+		return false;
+	}
+	return true;
+}
+
+/* --- reference resolution ------------------------------------------------ */
+
+static bool resolveRefs(Grammar *grammar, RuleNode *node, const char *filename) {
+	bool ok = true;
+
+	if (node->kind == RULE_STX) {
+		node->rule_reference = grammar->rules[node->as.s].head;
+		if (!node->rule_reference) {
+			fprintf(stderr, "%s: grammar error: rule '%s' is referenced but never defined\n",
+			        filename, syntaxName(grammar->reg, node->as.s));
+			return false;
+		}
+		return true;
+	}
+
+	/* Only composites have children. The old implementation fell through the
+	 * RULE_GRM case into RULE_STX and stamped a bogus rule_reference onto every
+	 * grammar node; walking explicitly avoids that class of mistake. */
+	for (size_t i = 0; i < node->n_children; i++) {
+		if (!resolveRefs(grammar, node->children[i], filename)) {
+			ok = false;
 		}
 	}
-	return STX_ERROR;
+	return ok;
 }
 
-static TOKEN_TYPE tokenTypeValFromNChars(char* str, size_t n) {
-	for (size_t i = 0; i < (sizeof(__tokenNameLiterals) / sizeof(char *)); i++) {
-		if(0 == strncmp(__tokenNameLiterals[i], str, n)) return i;
-	}
-	return TK_ERROR;
-}
+/* --- entry point --------------------------------------------------------- */
 
-static void __printNTabs(unsigned int n) {
-	for(unsigned int i = 0; i < n; i++) {
-		putchar('\t');
-	}
-	return;
-}
+int loadGrammar(Grammar *grammar, const char *filename, Registry *reg, MemPool *pool) {
+	char *source;
+	Token *tokens;
+	size_t n_tokens = 0;
+	Token bad_token;
+	GParser gp = {0};
+	RuleList pending = {0};
+	bool ok = true;
 
-static void __fPrintNTabs(unsigned int n, FILE *file) {
-	for(unsigned int i = 0; i < n; i++) {
-		fputc('\t', file);
-	}
-	return;
-}
+	grammar->reg = reg;
+	grammar->rules = NULL;
+	grammar->n_rules = 0;
+	grammar->start = STX__NONE;
 
-static char *syntaxTypeLiteralLookup(SYNTAX_TYPE type) {
-	return syntax_labels[type];
-}
-
-void initRuleNode(RuleNode *node) {
-	node->rule_reference = NULL;
-	node->n_children = 0;
-	node->children = NULL;
-	node->parent = NULL;
-}
-
-void resetGrammarRuleArray(GrammarRuleArray *array) {
-	array->n_rules = 0;
-	array->rules = NULL;
-}
-
-size_t getSemicolonOffsetFromRuleStart(Token *tokens) {
-	size_t ret = 0;
-	while(tokens[ret].type != TK_SEMICOLON && tokens[ret].type != TK_EOF) {
-		ret++;
-	}
-	return ret;
-}
-
-RULE_NODE_TYPE getPrevalentType(Token *tokens, size_t n) {
-	if(n == 1) {
-		switch(tokens[0].start[0]) {
-			case 'S': {
-				return RULE_STX;
-			}
-			case 'T': {
-				return RULE_TK;
-			}
-		}
-	}
-	return RULE_GRM;
-}
-
-GRAMMAR_TYPE getPrevalentGrammarType(Token *tokens, size_t n) {
-	size_t inGroup = 0;
-	bool commaFound = false;
-	bool pipeFound = false;
-
-	for(size_t i = 0; i < n; i++) {
-		switch(tokens[i].type) {
-			case TK_LPAREN:
-			case TK_LBRACE:
-			case TK_LSQUARE:
-				inGroup++;
-				continue;
-			case TK_RPAREN:
-			case TK_RBRACE:
-			case TK_RSQUARE:
-				inGroup--;
-				continue;
-			default:
-				break;
-		}
-		if(0 == inGroup && tokens[i].type == TK_COMMA) {
-			commaFound = true;
-		}
-		if(0 == inGroup && tokens[i].type == TK_PIPE) {
-			pipeFound = true;
-		}
-	}
-	if(commaFound) return GRM_AND;
-	if(pipeFound) return GRM_OR;
-
-	if(tokens[0].type == TK_LPAREN) return GRM_GROUP;
-	if(tokens[0].type == TK_LSQUARE) return GRM_IFONE;
-	if(tokens[0].type == TK_LBRACE) return GRM_IFMANY;
-	return GRM_AND; // and by default
-}
-
-size_t getRuleStartIndex(SYNTAX_TYPE type, Token *tokens, size_t n) {
-	char *typeLiteral = syntaxTypeLiteralLookup(type);
-	size_t len = strlen(typeLiteral);
-	for(size_t i = 0; i < n; i++) {
-		if(tokens[i].len == len) {
-			if(0 == strncmp(typeLiteral, tokens[i].start, len) && tokens[i + 1].type == TK_EQUAL) {
-				return i + 2;
-			}
-		}
-	}
-	return 1; // returns 0 on error because all rule starts should be at least 2 (STX_XYZ = ...)
-}
-
-size_t countChildren(GRAMMAR_TYPE type, Token *tokens, size_t n) { // should only be called on GRM_AND, GRM_OR
-	size_t n_children = 1;
-	size_t inGroup = 0;
-	TOKEN_TYPE delim;
-	switch(type) {
-		case GRM_AND:
-			delim = TK_COMMA;
-			break;
-		case GRM_OR:
-			delim = TK_PIPE;
-			break;
-		case GRM_GROUP:
-		case GRM_IFONE:
-		case GRM_IFMANY:
-		default:
-			break;
-	}
-
-	for(size_t i = 0; i < n; i++) {
-		switch(tokens[i].type) {
-			case TK_LPAREN:
-			case TK_LBRACE:
-			case TK_LSQUARE:
-				inGroup++;
-				continue;
-			case TK_RPAREN:
-			case TK_RBRACE:
-			case TK_RSQUARE:
-				inGroup--;
-				continue;
-			default:
-				break;
-		}
-		if(0 == inGroup && tokens[i].type == delim) {
-			n_children++;
-		}
-	}
-
-	return n_children;
-}
-
-size_t getDelimOffset(GRAMMAR_TYPE type, Token *tokens) {
-	size_t inGroup = 0;
-	TOKEN_TYPE delim;
-	size_t ret = 0;
-	switch(type) {
-		case GRM_AND:
-			delim = TK_COMMA;
-			break;
-		case GRM_OR:
-			delim = TK_PIPE;
-			break;
-		case GRM_GROUP:
-		case GRM_IFONE:
-		case GRM_IFMANY:
-		default:
-			break;
-	}
-	while(true) {
-		switch(tokens[ret].type) {
-			case TK_LPAREN:
-			case TK_LBRACE:
-			case TK_LSQUARE:
-				inGroup++;
-				ret++;
-				continue;
-			case TK_RPAREN:
-			case TK_RBRACE:
-			case TK_RSQUARE:
-				inGroup--;
-				ret++;
-				continue;
-			default:
-				break;
-		}
-		if(0 == inGroup && tokens[ret].type == delim) {
-			return ret;
-		}
-		ret++;
-	}
-	return 0;
-}
-
-int fillGrammarNode(RuleNode *node, Token *tokens, size_t n, MemPool *pool) {
-	initRuleNode(node);
-	RULE_NODE_TYPE nodeType = getPrevalentType(tokens, n);
-	node->node_type = nodeType;
-
-	switch(nodeType) {
-		case RULE_GRM: {
-			GRAMMAR_TYPE grammarType = getPrevalentGrammarType(tokens, n);
-			switch(grammarType) {
-				case GRM_AND:
-				case GRM_OR: {
-					node->nested_type.g = grammarType;
-					node->n_children = countChildren(grammarType, tokens, n);
-					node->children = palloc(pool, node->n_children * sizeof(RuleNode));
-
-					Token *start = tokens;
-					size_t delimOffset = 0;
-					for(size_t i = 0; i < node->n_children - 1; i++) {
-						delimOffset = getDelimOffset(grammarType, start);
-						fillGrammarNode(&(node->children[i]), start, delimOffset, pool);
-						node->children[i].parent = node;
-						start = start + delimOffset + 1;
-					}
-					fillGrammarNode(&(node->children[node->n_children - 1]), start, n - (size_t)(start - tokens), pool);
-					break;
-				}
-				case GRM_GROUP:
-				case GRM_IFONE:
-				case GRM_IFMANY: {
-					node->nested_type.g = grammarType;
-					node->n_children = 1;
-					node->children = palloc(pool, sizeof(RuleNode));
-					node->children->parent = node;
-					fillGrammarNode(node->children, tokens + 1, n - 2, pool);
-					break;
-				}
-				default: 
-					break;
-			}
-			break;
-		}
-		case RULE_STX: {
-			char *tmp_str = palloc(pool, tokens[0].len + 1);
-			for(size_t i = 0; i < tokens[0].len; i++) {
-				tmp_str[i] = tokens[0].start[i];
-			}
-			tmp_str[tokens[0].len] = '\0';
-			node->nested_type.s = getSNodeTypeFromLiteral(tmp_str);
-			break;
-		}
-		case RULE_TK: {
-			node->nested_type.t = tokenTypeValFromNChars(tokens[0].start, tokens[0].len);
-			break;
-		}
-	}
-	return 0;
-}
-
-int populateCyclicalReferences(RuleNode *node, GrammarRuleArray *rule_array) {
-	switch(node->node_type) {
-		case RULE_GRM: {
-			switch(node->nested_type.g) {
-				case GRM_AND:
-				case GRM_OR:
-				case GRM_GROUP:
-				case GRM_IFONE:
-				case GRM_IFMANY:
-					for(size_t i = 0; i < node->n_children; i++) {
-						populateCyclicalReferences(&(node->children[i]), rule_array);
-					}
-					break;
-				default:
-					break;
-			}
-		}
-		case RULE_STX: {
-			node->rule_reference = rule_array->rules[node->nested_type.s].head;
-			break;
-		}
-		case RULE_TK:
-		default:
-			break;
-	}
-	return 0;
-}
-
-int tryInitGrammarRuleArray(GrammarRuleArray *rule_array, char *fileName, MemPool *pool) {
-
-	char *source = tryReadFile(fileName, pool);
-	if(!source) {
+	source = tryReadFile(filename, pool);
+	if (!source) {
+		fprintf(stderr, "could not read grammar file '%s'\n", filename);
 		return 1;
 	}
-	initScanner(source);
 
-	size_t n_tokens = 0;
-	while(true) {
-		Token token = scanToken();
-		n_tokens++;
-		if (token.type == TK_EOF) break;
+	tokens = tokenizeAll(source, reg, pool, &n_tokens, &bad_token);
+	if (!tokens) {
+		fprintf(stderr, "%s:%zu: grammar error: %.*s\n",
+		        filename, bad_token.line, (int)bad_token.len, bad_token.start);
+		return 2;
 	}
 
-	Token *tokens = palloc(pool, (n_tokens * sizeof(Token)));
+	gp.tk = tokens;
+	gp.n = n_tokens;
+	gp.pos = 0;
+	gp.reg = reg;
+	gp.pool = pool;
+	gp.filename = filename;
 
-	initScanner(source);
+	while (!check(&gp, TK_EOF)) {
+		Token *name;
+		PendingRule rule;
 
-	for(size_t i = 0; i < n_tokens; i++) {
-		tokens[i] = scanToken();
-	}
-
-	rule_array->n_rules = (size_t) STX_ERROR;
-	rule_array->rules = palloc(pool, rule_array->n_rules * sizeof(GrammarRule));
-
-	for(size_t i = 0; i < rule_array->n_rules; i++) {
-		rule_array->rules[i].stype = i;
-		rule_array->rules[i].head = palloc(pool, sizeof(RuleNode));
-
-		size_t ruleStart = getRuleStartIndex((SYNTAX_TYPE)i, tokens, n_tokens); // casting i to int assuming n_rules doesn't exceed max
-		if(ruleStart == 1) { // ruleStart should be at least 2 since it's always preceded by "STX_XYZ ="
-			printf("valid rule start for i = %zu not found\n", i);
-			resetGrammarRuleArray(rule_array);
-			return 2;
+		if (check(&gp, TK_HASH)) {
+			if (!parseDirective(&gp)) {
+				return 3;
+			}
+			continue;
 		}
 
-		size_t semiOffset = getSemicolonOffsetFromRuleStart(&tokens[ruleStart]); // get rule length in Tokens
-		if(tokens[ruleStart].line != tokens[ruleStart + semiOffset].line) { // cursory rule validation, rules must be one line and terminated with semicolon
-			printf("rule start and semicolon not on same line...\n");
-			resetGrammarRuleArray(rule_array);			
+		if (!check(&gp, TK_IDENTIFIER)) {
+			gerror(&gp, cur(&gp), "expected a rule name");
+			return 3;
+		}
+		name = cur(&gp);
+		advance(&gp);
+
+		if (!match(&gp, TK_EQUAL)) {
+			gerror(&gp, cur(&gp), "expected '=' after rule name");
 			return 3;
 		}
 
-		// check here if rule is formed correctly, return if not
-		// 
-		// 1. (?) must be odd number of tokens?
-
-		fillGrammarNode(rule_array->rules[i].head, &tokens[ruleStart], semiOffset, pool); // doesn't do any checks!! can stack overflow with malformed, un-checked grammar.txt
-		rule_array->rules[i].head->parent = NULL;
-	}
-	for(size_t i = 0; i < rule_array->n_rules; i++) {
-		populateCyclicalReferences(rule_array->rules[i].head, rule_array);
-	}
-
-	FILE *rulesLog = fopen("./debug/grammar_tree.log", "w");
-	if(rulesLog) {
-		fPrintGrammarRuleArray(rule_array, rulesLog);
-		fclose(rulesLog);
-	}
-	return 0;
-}
-
-void printGrammarNode(RuleNode *node, unsigned int indent) {
-	switch(node->node_type) {
-		case RULE_GRM: {
-			__printNTabs(indent);
-			char *label = NULL;
-			switch(node->nested_type.g) {
-				case GRM_AND:
-					label = "AND"; break;
-				case GRM_OR:
-					label = "OR"; break;
-				case GRM_GROUP:
-					label = "GROUP"; break;
-				case GRM_IFONE:
-					label = "IFONE"; break;
-				case GRM_IFMANY:
-					label = "IFMANY"; break;
-			}
-			printf("%s\n", label);
-			for(size_t i = 0; i < node->n_children; i++) {
-				printGrammarNode(&(node->children[i]), indent + 1);
-			}
-			break;
+		rule.stype = registryInternSyntax(reg, name->start, name->len);
+		rule.line = name->line;
+		rule.head = parseAlt(&gp); /* a rule body starts at the loosest level */
+		if (!rule.head) {
+			return 3;
 		}
-		case RULE_STX: {
-			__printNTabs(indent);
-			printf("SYNTAX --- %s (%p)\n", 
-				syntaxTypeLiteralLookup(node->nested_type.s),
-				(void *)node->rule_reference);
-			break;
+
+		if (!match(&gp, TK_SEMICOLON)) {
+			gerror(&gp, cur(&gp), "expected ';' at end of rule");
+			return 3;
 		}
-		case RULE_TK: {
-			__printNTabs(indent);
-			printf("TOKEN --- %s\n", tokenLabelLookup(node->nested_type.t));
-			break;
+
+		ruleListPush(&pending, rule, pool);
+	}
+
+	if (pending.n == 0) {
+		fprintf(stderr, "%s: grammar error: no rules defined\n", filename);
+		return 4;
+	}
+
+	/* Syntax IDs are dense, so the rule table can be indexed by ID directly.
+	 * The count is only known now, after interning every name the file used. */
+	grammar->n_rules = registrySyntaxCount(reg);
+	grammar->rules = pzalloc(pool, grammar->n_rules * sizeof(GrammarRule));
+	for (size_t i = 0; i < grammar->n_rules; i++) {
+		grammar->rules[i].stype = (SYNTAX_TYPE)i;
+		grammar->rules[i].head = NULL;
+	}
+
+	for (size_t i = 0; i < pending.n; i++) {
+		SYNTAX_TYPE st = pending.items[i].stype;
+		if (grammar->rules[st].head) {
+			fprintf(stderr, "%s:%zu: grammar error: rule '%s' defined more than once\n",
+			        filename, pending.items[i].line, syntaxName(reg, st));
+			ok = false;
+			continue;
+		}
+		grammar->rules[st].head = pending.items[i].head;
+	}
+
+	/* The first rule in the file is the start symbol, so retargeting the parser
+	 * at a different language is purely a grammar-file edit. */
+	grammar->start = pending.items[0].stype;
+
+	for (size_t i = 0; i < pending.n; i++) {
+		if (!resolveRefs(grammar, pending.items[i].head, filename)) {
+			ok = false;
 		}
 	}
+
+	return ok ? 0 : 5;
 }
 
-void printGrammarRule(GrammarRule *rule) {
-	printf("RULE: %s\n", syntaxTypeLiteralLookup(rule->stype));
-	printf("-\n");
-	printGrammarNode(rule->head, 1);
-	printf("\n----\n----\n\n");
-}
-
-void printGrammarRuleByIndex(GrammarRuleArray *array, int i) {
-	printGrammarRule(&(array->rules[i]));
-}
-
-void printGrammarRuleArray(GrammarRuleArray *array) {
-	for(size_t i = 0; i < array->n_rules; i++) {
-		printGrammarRule(&(array->rules[i]));
+const RuleNode *grammarRuleFor(const Grammar *grammar, SYNTAX_TYPE type) {
+	if (type < 0 || (size_t)type >= grammar->n_rules) {
+		return NULL;
 	}
+	return grammar->rules[type].head;
 }
 
-void fPrintGrammarNode(RuleNode *node, unsigned int indent, FILE *file) {
-	switch(node->node_type) {
-		case RULE_GRM: {
-			__fPrintNTabs(indent, file);
-			char *label = NULL;
-			switch(node->nested_type.g) {
-				case GRM_AND:
-					label = "AND"; break;
-				case GRM_OR:
-					label = "OR"; break;
-				case GRM_GROUP:
-					label = "GROUP"; break;
-				case GRM_IFONE:
-					label = "IFONE"; break;
-				case GRM_IFMANY:
-					label = "IFMANY"; break;
-			}
-			fprintf(file, "%s\n", label);
-			for(size_t i = 0; i < node->n_children; i++) {
-				fPrintGrammarNode(&(node->children[i]), indent + 1, file);
+/* --- debug output -------------------------------------------------------- */
+
+static const char *grammarTypeName(GRAMMAR_TYPE g) {
+	switch (g) {
+		case GRM_SEQ:    return "SEQ";
+		case GRM_ALT:    return "ALT";
+		case GRM_OPT:    return "OPT";
+		case GRM_REPEAT: return "REPEAT";
+	}
+	return "?";
+}
+
+static void fPrintRuleNode(const Grammar *grammar, const RuleNode *node,
+                           unsigned indent, FILE *file) {
+	for (unsigned i = 0; i < indent; i++) {
+		fputc('\t', file);
+	}
+
+	switch (node->kind) {
+		case RULE_GRM:
+			fprintf(file, "%s\n", grammarTypeName(node->as.g));
+			for (size_t i = 0; i < node->n_children; i++) {
+				fPrintRuleNode(grammar, node->children[i], indent + 1, file);
 			}
 			break;
-		}
-		case RULE_STX: {
-			__fPrintNTabs(indent, file);
-			fprintf(file, "SYNTAX --- %s\n", syntaxTypeLiteralLookup(node->nested_type.s));
+		case RULE_STX:
+			fprintf(file, "SYNTAX --- %s\n", syntaxName(grammar->reg, node->as.s));
 			break;
-		}
-		case RULE_TK: {
-			__fPrintNTabs(indent, file);
-			fprintf(file, "TOKEN --- %s\n", tokenLabelLookup(node->nested_type.t));
+		case RULE_TK:
+			fprintf(file, "TOKEN  --- %s\n", tokenName(grammar->reg, node->as.t));
 			break;
-		}
 	}
 }
 
-void fPrintGrammarRule(GrammarRule *rule, FILE *file) {
-	fprintf(file, "RULE: %s\n", syntaxTypeLiteralLookup(rule->stype));
-	fprintf(file, "-\n");
-	fPrintGrammarNode(rule->head, 1, file);
-	fprintf(file, "\n----\n----\n\n");
-
-}
-
-void fPrintGrammarRuleByIndex(GrammarRuleArray *array, int i, FILE *file) {
-	fPrintGrammarRule(&(array->rules[i]), file);
-}
-
-void fPrintGrammarRuleArray(GrammarRuleArray *array, FILE *file) {
-	for(size_t i = 0; i < array->n_rules; i++) {
-		fPrintGrammarRule(&(array->rules[i]), file);
+void fPrintGrammar(const Grammar *grammar, FILE *file) {
+	for (size_t i = 0; i < grammar->n_rules; i++) {
+		if (!grammar->rules[i].head) {
+			continue;
+		}
+		fprintf(file, "RULE: %s%s\n",
+		        syntaxName(grammar->reg, grammar->rules[i].stype),
+		        (grammar->rules[i].stype == grammar->start) ? "   (start)" : "");
+		fprintf(file, "-\n");
+		fPrintRuleNode(grammar, grammar->rules[i].head, 1, file);
+		fprintf(file, "\n----\n----\n\n");
 	}
 }
