@@ -1918,19 +1918,81 @@ static int linenoiseParseParams(const char *s, int *out, int max) {
     return n;
 }
 
-/* Recognises Shift+Enter in either protocol. The modifier parameter is
- * 1 + a bitmask, with shift as bit 0, so Shift+Ctrl+Enter counts too. */
-static int linenoiseIsShiftEnter(const char *param, char final) {
+static int linenoiseParseModifiedKey(const char *param, char final,
+                                     int *codepoint, int *modifiers) {
     int p[3] = {0, 0, 0};
     int n = linenoiseParseParams(param, p, 3);
 
-    /* kitty keyboard protocol:   ESC [ 13 ; mod u */
-    if (final == 'u' && n >= 2 && p[0] == 13) return (p[1] - 1) & 1;
+    /* kitty keyboard protocol: ESC [ codepoint ; mod u */
+    if (final == 'u' && n >= 2) {
+        *codepoint = p[0];
+        *modifiers = p[1] - 1;
+        return 1;
+    }
 
-    /* xterm modifyOtherKeys:     ESC [ 27 ; mod ; 13 ~ */
-    if (final == '~' && n >= 3 && p[0] == 27 && p[2] == 13) return (p[1] - 1) & 1;
+    /* xterm modifyOtherKeys: ESC [ 27 ; mod ; codepoint ~ */
+    if (final == '~' && n >= 3 && p[0] == 27) {
+        *codepoint = p[2];
+        *modifiers = p[1] - 1;
+        return 1;
+    }
 
     return 0;
+}
+
+/* Recognises Shift+Enter in either protocol. The modifier parameter is
+ * 1 + a bitmask, with shift as bit 0, so Shift+Ctrl+Enter counts too. */
+static int linenoiseIsShiftEnter(const char *param, char final) {
+    int codepoint, modifiers;
+    return linenoiseParseModifiedKey(param,final,&codepoint,&modifiers) &&
+           codepoint == ENTER && (modifiers & 1);
+}
+
+/* Convert extended-protocol Ctrl+letter reports back to the control bytes
+ * handled by the editor's ordinary input switch. Only map shortcuts that the
+ * editor implements; mapping Ctrl+[ to ESC, for example, would incorrectly
+ * make it wait for a second escape sequence that is not coming. */
+static int linenoiseControlByte(int codepoint, int modifiers, char *control) {
+    int value;
+
+    if (!(modifiers & 4) ||
+        !((codepoint >= 'a' && codepoint <= 'z') ||
+          (codepoint >= 'A' && codepoint <= 'Z'))) return 0;
+
+    value = codepoint & 0x1f;
+    switch(value) {
+    case CTRL_A:
+    case CTRL_B:
+    case CTRL_C:
+    case CTRL_D:
+    case CTRL_E:
+    case CTRL_F:
+    case 8:          /* Ctrl-H / backspace */
+    case CTRL_K:
+    case CTRL_L:
+    case CTRL_N:
+    case CTRL_P:
+    case CTRL_T:
+    case CTRL_U:
+    case CTRL_W:
+        *control = (char)value;
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+/* Ctrl-D is EOF only on an empty line. With text present it retains the usual
+ * readline behavior of deleting the character under the cursor. */
+static char *linenoiseCtrlD(struct linenoiseState *l) {
+    if (l->len > 0) {
+        linenoiseEditDelete(l);
+        return linenoiseEditMore;
+    }
+    history_len--;
+    free(history[history_len]);
+    errno = ENOENT;
+    return NULL;
 }
 
 /* Shared tail of the Enter and Shift+Enter paths. */
@@ -1976,6 +2038,7 @@ char *linenoiseEditFeed(struct linenoiseState *l) {
         c = retval;
     }
 
+process_char:
     switch(c) {
     case ENTER:    /* enter */
         return linenoiseAcceptLine(l, 0);
@@ -1988,15 +2051,7 @@ char *linenoiseEditFeed(struct linenoiseState *l) {
         break;
     case CTRL_D:     /* ctrl-d, remove char at right of cursor, or if the
                         line is empty, act as end-of-file. */
-        if (l->len > 0) {
-            linenoiseEditDelete(l);
-        } else {
-            history_len--;
-            free(history[history_len]);
-            errno = ENOENT;
-            return NULL;
-        }
-        break;
+        return linenoiseCtrlD(l);
     case CTRL_T:    /* ctrl-t, swaps current character with previous. */
         /* Handle UTF-8: swap the two UTF-8 characters around cursor. */
         if (l->pos > 0 && l->pos < l->len) {
@@ -2058,6 +2113,17 @@ char *linenoiseEditFeed(struct linenoiseState *l) {
                     }
                 }
                 param[plen] = '\0';
+
+                {
+                    int codepoint, modifiers;
+                    char control;
+                    if (linenoiseParseModifiedKey(param,final,
+                                                  &codepoint,&modifiers) &&
+                        linenoiseControlByte(codepoint,modifiers,&control)) {
+                        c = control;
+                        goto process_char;
+                    }
+                }
 
                 if (final == '~') {
                     if (plen == 1 && param[0] == '3') {

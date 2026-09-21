@@ -66,6 +66,9 @@ Examples:
 
 # Start a REPL using the default grammar
 ./bin/main.run --repl
+
+# Start an AST-only REPL (parse and print without executing)
+./bin/main.run --repl --parse-only
 ```
 
 Unless changed with `--dump-grammar`, the compiled grammar is written to `debug/grammar_tree.log` each time the program starts.
@@ -151,6 +154,8 @@ Start an interactive session with:
 ```
 
 Variables and functions persist between entries. Expressions print their results automatically, and input continues while brackets are unbalanced. A trailing backslash also forces continuation. History is saved to `~/.flexible_parser_history`.
+
+For a parser-only session, use `./bin/main.run --repl --parse-only`. Every successful entry prints its AST, and no interpreter or runtime state is created. `--tokens` can be added to print the token stream as well.
 
 Available commands:
 

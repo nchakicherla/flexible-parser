@@ -44,6 +44,7 @@ make ./bin/main.run
 ./bin/main.run -g ./resources/grammar.txt -s ./resources/demo.tl
 ./bin/main.run --parse-only --ast -s ./resources/script.tl
 ./bin/main.run --repl
+./bin/main.run --repl --parse-only
 ```
 
 ## Tree-Walking Interpreter
@@ -146,6 +147,8 @@ Start it with:
 ```
 
 REPL capabilities include:
+
+- Parse-only operation that prints every AST without invoking the interpreter
 
 - Variables and functions persist between entries
 - Expression results are printed automatically

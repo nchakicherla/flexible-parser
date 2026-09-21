@@ -19,7 +19,7 @@ static void usage(void) {
 	printf("  --ast       print the syntax tree\n");
 	printf("  --tokens    print the token stream\n");
 	printf("  --dump-grammar <file>  write the compiled rule trees to a file\n");
-	printf("  --parse-only           skip execution\n");
+	printf("  --parse-only           skip execution (prints ASTs in the REPL)\n");
 	printf("  -i  --repl             start an interactive session\n");
 }
 
@@ -84,7 +84,8 @@ int main(int argc, char **argv) {
 	}
 
 	if (repl) {
-		exit_code = runRepl(&parser, grammar_file);
+		exit_code = runRepl(&parser, grammar_file, parse_only,
+		                    show_ast, show_tokens);
 		goto done;
 	}
 

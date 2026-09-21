@@ -18,6 +18,7 @@ typedef struct s_Repl {
 	Parser *parser;
 	Interp *interp;
 	const char *grammar_file;
+	bool parse_only;
 	bool show_ast;
 	bool show_tokens;
 	int exit_code;
@@ -153,14 +154,19 @@ static SyntaxNode *parseNext(Repl *repl, TokenStream *stream) {
 
 /* --- commands ------------------------------------------------------------- */
 
-static void printHelp(void) {
+static void printHelp(const Repl *repl) {
 	printf("  :help            this message\n");
-	printf("  :quit  :q        leave the repl (also Ctrl-D)\n");
-	printf("  :ast             toggle printing the syntax tree for each entry\n");
+	printf("  :quit  :q        leave the repl (also Ctrl-D at an empty prompt)\n");
+	if (!repl->parse_only) {
+		printf("  :ast             toggle printing the syntax tree for each entry\n");
+	}
 	printf("  :tokens          toggle printing the token stream for each entry\n");
 	printf("  :rules           list the rules the loaded grammar defines\n");
-	printf("  :load <file>     read and run a source file in this session\n");
-	printf("  :reset           discard all variables and functions\n");
+	printf("  :load <file>     read and %s a source file\n",
+	       repl->parse_only ? "parse" : "run");
+	if (!repl->parse_only) {
+		printf("  :reset           discard all variables and functions\n");
+	}
 	printf("\n");
 	printf("  Blocks continue automatically while brackets are unbalanced.\n");
 	printf("  Shift+Enter forces a continuation on terminals that support it.\n");
@@ -203,20 +209,28 @@ static bool handleCommand(Repl *repl, const char *line) {
 	}
 
 	if (0 == strcmp(line, ":help") || 0 == strcmp(line, ":h")) {
-		printHelp();
+		printHelp(repl);
 	} else if (0 == strcmp(line, ":quit") || 0 == strcmp(line, ":q")) {
 		repl->quitting = true;
 	} else if (0 == strcmp(line, ":ast")) {
-		repl->show_ast = !repl->show_ast;
-		printf("ast printing %s\n", repl->show_ast ? "on" : "off");
+		if (repl->parse_only) {
+			printf("ast printing is always on in parse-only mode\n");
+		} else {
+			repl->show_ast = !repl->show_ast;
+			printf("ast printing %s\n", repl->show_ast ? "on" : "off");
+		}
 	} else if (0 == strcmp(line, ":tokens")) {
 		repl->show_tokens = !repl->show_tokens;
 		printf("token printing %s\n", repl->show_tokens ? "on" : "off");
 	} else if (0 == strcmp(line, ":rules")) {
 		listRules(repl);
 	} else if (0 == strcmp(line, ":reset")) {
-		repl->interp = interpCreate(&repl->parser->reg, &repl->parser->pool);
-		printf("session state cleared\n");
+		if (repl->parse_only) {
+			printf("no runtime state exists in parse-only mode\n");
+		} else {
+			repl->interp = interpCreate(&repl->parser->reg, &repl->parser->pool);
+			printf("session state cleared\n");
+		}
 	} else if (0 == strncmp(line, ":load", 5)) {
 		const char *arg = line + 5;
 		while (*arg == ' ') {
@@ -278,6 +292,9 @@ static void runEntry(Repl *repl, const char *text) {
 		if (repl->show_ast) {
 			printSyntaxNode(&p->reg, node, 0);
 		}
+		if (repl->parse_only) {
+			continue;
+		}
 
 		/* Deliberately not wrapped in a scope: bindings made at the prompt have
 		 * to outlive the entry that created them. */
@@ -308,23 +325,25 @@ static char *historyPath(char *buf, size_t size) {
 
 static void banner(Repl *repl) {
 	setColor(ANSI_CYAN);
-	printf("flexible-parser repl");
+	printf("flexible-parser repl%s", repl->parse_only ? " (parse-only)" : "");
 	resetColor();
 	printf("  grammar: %s\n", repl->grammar_file);
-	printf("type :help for commands, Ctrl-D to exit\n\n");
+	printf("type :help for commands, Ctrl-D at an empty prompt to exit\n\n");
 }
 
-int runRepl(Parser *parser, const char *grammar_file) {
+int runRepl(Parser *parser, const char *grammar_file, bool parse_only,
+            bool show_ast, bool show_tokens) {
 	Repl repl;
 	StrBuf block;
 	char hist[1024];
 	bool have_history;
 
 	repl.parser = parser;
-	repl.interp = interpCreate(&parser->reg, &parser->pool);
+	repl.interp = parse_only ? NULL : interpCreate(&parser->reg, &parser->pool);
 	repl.grammar_file = grammar_file;
-	repl.show_ast = false;
-	repl.show_tokens = false;
+	repl.parse_only = parse_only;
+	repl.show_ast = show_ast || parse_only;
+	repl.show_tokens = show_tokens;
 	repl.exit_code = 0;
 	repl.quitting = false;
 
