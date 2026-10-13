@@ -1,90 +1,65 @@
 #include "parser.h"
 
-#include <stdio.h>
-
 void initParser(Parser *parser) {
-	initMemPool(&parser->pool);
-	initRegistry(&parser->reg, &parser->pool);
-
-	parser->tokens = NULL;
 	parser->n_tokens = 0;
-	parser->stream.tk = NULL;
-	parser->stream.n = 0;
-	parser->stream.pos = 0;
-	parser->stream.furthest = 0;
-	parser->stream.depth = 0;
-	parser->stream.depth_exceeded = false;
-	parser->ast = NULL;
-
+	parser->tokens = NULL;
+	parser->head = NULL;
+	initMemPool(&parser->p);
 	parser->is_initialized = true;
 	parser->is_grammar_set = false;
 }
 
 void termParser(Parser *parser) {
-	termMemPool(&parser->pool);
-	parser->is_initialized = false;
-	parser->is_grammar_set = false;
+	termMemPool(&parser->p);
 }
 
-ParseStatus parserSetGrammar(Parser *parser, const char *grammar_file) {
-	if (!parser->is_initialized) {
-		return PARSE_NOT_INITIALIZED;
+int trySetParserGrammar(Parser *parser, char *grammar_file) {
+
+	if(!parser->is_initialized) {
+		return 1;
 	}
 
-	if (0 != loadGrammar(&parser->grammar, grammar_file, &parser->reg, &parser->pool)) {
-		return PARSE_GRAMMAR_FAILED;
+	int ret = tryInitGrammarRuleArray(&parser->grammar, grammar_file, &parser->p); // rule array itself is in parser's arena
+	if(ret != 0) {
+		return 2;
 	}
 
 	parser->is_grammar_set = true;
-	return PARSE_OK;
+	return 0;
 }
 
-ParseStatus parserParseSource(Parser *parser, const char *source) {
-	Token bad_token;
+int tryScanParserTokens(Parser *parser, char *source) {
 
-	if (!parser->is_initialized) {
-		return PARSE_NOT_INITIALIZED;
+	if(!parser->is_initialized) {
+		return 1;
 	}
-	/* The grammar defines the token alphabet as well as the rules, so it has to
-	 * be loaded before the source can even be scanned. */
-	if (!parser->is_grammar_set) {
-		return PARSE_NO_GRAMMAR;
+	/*
+	if(!parser->is_grammar_set) {
+		return 2;
 	}
-	if (!source) {
-		return PARSE_NO_SOURCE;
-	}
-
-	parser->tokens = tokenizeAll(source, &parser->reg, &parser->pool,
-	                             &parser->n_tokens, &bad_token);
-	if (!parser->tokens) {
-		fprintf(stderr, "%zu: scan error: %.*s\n",
-		        bad_token.line, (int)bad_token.len, bad_token.start);
-		return PARSE_SCAN_FAILED;
+	*/
+	if(!source) {
+		return 3;
 	}
 
-	parser->stream.tk = parser->tokens;
-	parser->stream.n = parser->n_tokens;
-	parser->stream.pos = 0;
-	parser->stream.furthest = 0;
-	parser->stream.depth = 0;
-	parser->stream.depth_exceeded = false;
-
-	parser->ast = parseTokenStream(&parser->grammar, &parser->stream, &parser->pool);
-	if (!parser->ast) {
-		return PARSE_FAILED;
+	bool scanner_error = false;
+	size_t n_tokens = countTokens(source, &scanner_error);
+	if(scanner_error) {
+		printf("encountered error token, returning with error code...\n");
+		return 4;
 	}
-	return PARSE_OK;
-}
 
-const char *parseStatusMessage(ParseStatus status) {
-	switch (status) {
-		case PARSE_OK:              return "ok";
-		case PARSE_NOT_INITIALIZED: return "parser was not initialized";
-		case PARSE_GRAMMAR_FAILED:  return "grammar could not be loaded";
-		case PARSE_NO_GRAMMAR:      return "no grammar has been set";
-		case PARSE_NO_SOURCE:       return "no source provided";
-		case PARSE_SCAN_FAILED:     return "source could not be tokenized";
-		case PARSE_FAILED:          return "source did not match the grammar";
+	parser->n_tokens = n_tokens;
+	parser->tokens = palloc(&parser->p, (n_tokens * sizeof(Token)));
+	initScanner(source);
+
+	for(size_t i = 0; i < n_tokens; i++) {
+		parser->tokens[i] = scanToken();
 	}
-	return "unknown error";
+
+	parser->tk_stream.tk = parser->tokens;
+	parser->tk_stream.pos = 0;
+	parser->tk_stream.n = parser->n_tokens;
+	
+	return 0;
 }

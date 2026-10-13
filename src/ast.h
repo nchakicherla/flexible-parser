@@ -1,55 +1,33 @@
 #ifndef AST_H
 #define AST_H
 
-/* ast.h - matching a token stream against a rule tree.
- *
- * Every parse function obeys one invariant: on failure it returns NULL and
- * leaves the stream position exactly where it found it. That is what makes
- * alternation and repetition safe to backtrack through.
- */
-
+#include <string.h>
 #include "common.h"
-#include "mempool.h"
-#include "grammar.h"
-#include "scanner.h"
-#include "ast_node.h"
 
-#include <stdio.h>
+#include "mempool.h"
+#include "scanner.h"
+#include "file.h"
+#include "ast_node.h"
+#include "syntax_types.h"
+#include "grammar.h"
 
 typedef struct s_TokenStream {
 	Token *tk;
-	size_t n;
 	size_t pos;
-	size_t furthest; /* high-water mark, so a failed parse can say where it gave up */
-	unsigned depth;
-	bool depth_exceeded; /* set once; almost always means a left-recursive rule */
+	size_t n;
 } TokenStream;
 
-/* Matches `rnode` at the current position. */
-SyntaxNode *parseNode(const RuleNode *rnode, TokenStream *stream, MemPool *pool);
-
-/* Matches one named rule at the current position, reporting nothing on failure
- * and leaving the position untouched when it fails. A match must consume at
- * least one token, so a rule that can match empty cannot spin the caller's
- * loop. The REPL uses this to walk an entry statement by statement, trying
- * candidate rules at each step.
- *
- * `stream->furthest` is never reset here, so repeated calls accumulate the best
- * position reached across every attempt - which is what makes the eventual
- * error message point at the real problem. */
-SyntaxNode *parseRuleAt(const Grammar *grammar, SYNTAX_TYPE type,
-                        TokenStream *stream, MemPool *pool);
-
-/* As above, but starts at the beginning and requires the whole stream to be
- * consumed. */
-SyntaxNode *parseWithRule(const Grammar *grammar, SYNTAX_TYPE type,
-                          TokenStream *stream, MemPool *pool);
-
-/* Matches the grammar's start rule and requires the whole stream to be
- * consumed. Returns NULL and reports the furthest position reached on failure. */
-SyntaxNode *parseTokenStream(const Grammar *grammar, TokenStream *stream, MemPool *pool);
-
-void printSyntaxNode(Registry *reg, const SyntaxNode *node, unsigned indent);
-void fPrintSyntaxNode(Registry *reg, const SyntaxNode *node, unsigned indent, FILE *file);
+void defineParentPtrs(SyntaxNode *head);
+void addChild(SyntaxNode *parent, SyntaxNode *child, MemPool *pool);
+SyntaxNode *wrapNode(SyntaxNode *child, SYNTAX_TYPE stype, MemPool *pool);
+SyntaxNode *parseAnd(RuleNode *rnode, TokenStream *stream, MemPool *pool);
+SyntaxNode *parseOr(RuleNode *rnode, TokenStream *stream, MemPool *pool);
+SyntaxNode *parseIfOne(RuleNode *rnode, TokenStream *stream, MemPool *pool);
+SyntaxNode *parseIfMany(RuleNode *rnode, TokenStream *stream, MemPool *pool);
+SyntaxNode *parseSyntax(RuleNode *rnode, TokenStream *stream, MemPool *pool);
+SyntaxNode *parseToken(RuleNode *rnode, TokenStream *stream, MemPool *pool);
+SyntaxNode *parseGrammar(RuleNode* rnode, TokenStream *stream, MemPool *pool);
+void printTokenStream(TokenStream *stream);
+void printSyntaxNode(SyntaxNode *node, unsigned int indent);
 
 #endif // AST_H

@@ -1,94 +1,115 @@
 #include "scanner.h"
+#include "token_types.h"
+#include "token_labels.h"
 
 #include <stdio.h>
-#include <string.h>
 
-void initScanner(Scanner *sc, const char *source, Registry *reg) {
-	sc->start = source;
-	sc->current = source;
-	sc->line = 1;
-	sc->reg = reg;
+Scanner scanner;
+
+void initScanner(char *source) {
+	scanner.start = source;
+	scanner.current = source;
+	scanner.line = 1;
 }
 
-static bool isAtEnd(Scanner *sc) {
-	return *sc->current == '\0';
+bool isAtEnd(void) {
+	return *scanner.current == '\0';
 }
 
-static char advance(Scanner *sc) {
-	sc->current++;
-	return sc->current[-1];
+char advance(void) {
+	scanner.current++;
+	return scanner.current[-1];
 }
 
-static char peek(Scanner *sc) {
-	return *sc->current;
+char peek(void) {
+	return *scanner.current;
 }
 
-static char peekNext(Scanner *sc) {
-	if (isAtEnd(sc)) {
+char peekNext(void) {
+	if (isAtEnd()) {
 		return '\0';
 	}
-	return sc->current[1];
+	return scanner.current[1];
 }
 
-static bool isDigit(char c) {
-	return c >= '0' && c <= '9';
+char peekNextNext(void) {
+	if (isAtEnd()) {
+		return '\0';
+	}
+	if(scanner.current[1] == '\0') {
+		return '\0';
+	}
+	return scanner.current[2];
 }
 
-static bool isAlpha(char c) {
-	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+bool match(char expect) {
+	if (isAtEnd())  {
+		return false;
+	}
+	if (*scanner.current != expect)  {
+		return false;
+	}
+	
+	scanner.current++;
+	return true;
 }
 
-static Token makeToken(Scanner *sc, TOKEN_TYPE type) {
+Token makeToken(TOKEN_TYPE type) {
 	Token token;
 	token.type = type;
-	token.start = sc->start;
-	token.len = (size_t)(sc->current - sc->start);
-	token.line = sc->line;
+	token.start = scanner.start;
+	token.len = (size_t)(scanner.current - scanner.start);
+	token.line = scanner.line;
 	return token;
 }
 
-static Token makeErrorToken(Scanner *sc, const char *message) {
+Token makeErrorToken(char *message) {
 	Token token;
 	token.type = TK_ERROR;
 	token.start = message;
 	token.len = strlen(message);
-	token.line = sc->line;
+	token.line = scanner.line;
 	return token;
 }
 
-static void skipWhitespace(Scanner *sc) {
+void skipWhitespace(void) {
 	while (true) {
-		switch (peek(sc)) {
+		char c = peek();
+		switch(c) {
 			case ' ':
 			case '\r':
 			case '\t':
-				advance(sc);
+				advance();
 				break;
 			case '\n':
-				sc->line++;
-				advance(sc);
+				scanner.line++;
+				advance();
 				break;
 			case '/':
-				if (peekNext(sc) == '/') {
-					while (peek(sc) != '\n' && !isAtEnd(sc)) {
-						advance(sc);
+				if (peekNext() == '/') {
+					while (peek() != '\n' && !isAtEnd()) {
+						advance();
 					}
-				} else if (peekNext(sc) == '*') {
-					advance(sc);
-					advance(sc);
-					while (!isAtEnd(sc)) {
-						if (peek(sc) == '*' && peekNext(sc) == '/') {
-							advance(sc);
-							advance(sc);
-							break;
+				} 
+				else if (peekNext() == '*') {
+					advance();
+					advance();
+					while (peek() != '*' && !isAtEnd()) {
+						if(peek() == '\n') {
+							scanner.line++;
 						}
-						if (peek(sc) == '\n') {
-							sc->line++;
+						advance();
+						if(peek() == '*') {
+							if(peekNext() == '/') {
+								advance();
+								advance();
+								break;
+							}
+							advance();
 						}
-						advance(sc);
 					}
 				} else {
-					return; /* a bare '/' is punctuation, not a comment */
+					return;
 				}
 				break;
 			default:
@@ -97,133 +118,264 @@ static void skipWhitespace(Scanner *sc) {
 	}
 }
 
-static Token scanString(Scanner *sc) {
-	while (peek(sc) != '"' && !isAtEnd(sc)) {
-		if (peek(sc) == '\n') {
-			return makeErrorToken(sc, "unterminated string");
+Token string(void) {
+	while (peek() != '"' && !isAtEnd()) {
+		if (peek() == '\n') { // strings can be multi-line
+			// scanner.line++;
+			return makeErrorToken("unterminated string");
 		}
-		advance(sc);
+		advance();
 	}
-	if (isAtEnd(sc)) {
-		return makeErrorToken(sc, "unterminated string");
+
+	if (isAtEnd()) {
+		return makeErrorToken("unterminated string");
 	}
-	advance(sc); /* closing quote */
-	return makeToken(sc, TK_CHARS);
+
+	advance();
+	return makeToken(TK_CHARS);
 }
 
-static Token scanNumber(Scanner *sc) {
-	while (isDigit(peek(sc))) {
-		advance(sc);
-	}
-	if (peek(sc) == '.' && isDigit(peekNext(sc))) {
-		advance(sc);
-		while (isDigit(peek(sc))) {
-			advance(sc);
-		}
-	}
-	if (peek(sc) == 'e' && isDigit(peekNext(sc))) {
-		advance(sc);
-		while (isDigit(peek(sc))) {
-			advance(sc);
-		}
-	}
-	return makeToken(sc, TK_NUM);
+bool isDigit(char c) {
+	return c >= '0' && c <= '9';
 }
 
-/* Keyword recognition is a registry lookup rather than a hand-written trie, so
- * adding a keyword means adding one line to token.def. */
-static Token scanIdentifier(Scanner *sc) {
-	TOKEN_TYPE kw;
-	size_t len;
-
-	while (isAlpha(peek(sc)) || isDigit(peek(sc))) {
-		advance(sc);
+Token number(void) {
+	while (isDigit(peek())) {
+		advance();
 	}
-	len = (size_t)(sc->current - sc->start);
 
-	kw = registryMatchKeyword(sc->reg, sc->start, len);
-	return makeToken(sc, (kw == TK__NONE) ? TK_IDENTIFIER : kw);
+	if (peek() == '.' && isDigit(peekNext())) {
+		advance();
+
+		while (isDigit(peek())) {
+			advance();
+		}
+	}
+
+	if (peek() == 'e' && isDigit(peekNext())) {
+		advance();
+
+		while (isDigit(peek())) {
+			advance();
+		}
+	}
+
+	return makeToken(TK_NUM);
 }
 
-Token scanToken(Scanner *sc) {
-	char c;
-	char next;
-	TOKEN_TYPE punct;
-	size_t punct_len;
+bool isAlpha(char c) {
+	return (c >= 'a' && c <= 'z') ||
+		(c >= 'A' && c <= 'Z') ||
+		c == '_';
+}
 
-	skipWhitespace(sc);
-	sc->start = sc->current;
-
-	if (isAtEnd(sc)) {
-		return makeToken(sc, TK_EOF);
+TOKEN_TYPE checkKeyword(size_t start, size_t len, char *rest, TOKEN_TYPE type) {
+	if (scanner.current - scanner.start == start + len &&
+		memcmp(scanner.start + start, rest, len) == 0) {
+		return type;
 	}
 
-	c = peek(sc);
+	return TK_IDENTIFIER;
+}
+
+TOKEN_TYPE identifierType(void) {
+
+	switch (scanner.start[0]) {
+		case 'a': return checkKeyword(1, 2, "nd", TK_AND);
+		case 'b':
+			if (scanner.current - scanner.start > 1) {
+				switch (scanner.start[1]) {
+					case 'o': return checkKeyword(2, 2, "ol", TK_BOOL);
+					case 'r': return checkKeyword(2, 3, "eak", TK_BREAK);
+				}
+			}
+		case 'c': {
+			if (scanner.current - scanner.start > 1) {
+				switch (scanner.start[1]) {
+					case 'a': return checkKeyword(2, 2, "se", TK_CASE);
+					case 'l': return checkKeyword(2, 3, "ass", TK_CLASS);
+					case 'o': return checkKeyword(2, 3, "nst", TK_CONST);
+				}
+			}
+		}
+		case 'e':
+			if (scanner.current - scanner.start > 1) {
+				switch (scanner.start[1]) {
+					case 'l': return checkKeyword(2, 2, "se", TK_ELSE);
+					case 'x': return checkKeyword(2, 2, "it", TK_EXIT); 
+				}
+			}
+		case 'f': {
+			if (scanner.current - scanner.start > 1) {
+				switch (scanner.start[1]) {
+					case 'a': return checkKeyword(2, 3, "lse", TK_FALSE);
+					case 'l': return checkKeyword(2, 1, "t", TK_FLT);
+					case 'n': return checkKeyword(0, 2, "fn", TK_FN);;
+					case 'o': return checkKeyword(2, 1, "r", TK_FOR);
+				}
+			}
+		}
+		case 'i': {
+			if (scanner.current - scanner.start > 1) {
+				switch (scanner.start[1]) {
+					case 'f': return checkKeyword(0, 2, "if", TK_IF);
+					case 'n': return checkKeyword(0, 2, "in", TK_IN);
+					case '1': {
+						if (scanner.current - scanner.start > 2) {
+							return checkKeyword(2, 1, "6", TK_I16);
+						}
+					}						
+					case '3': {
+						if (scanner.current - scanner.start > 2) {
+							return checkKeyword(2, 1, "2", TK_I32);
+						}
+					}
+					case '6': {
+						if (scanner.current - scanner.start > 2) {
+							return checkKeyword(2, 1, "4", TK_I64);
+						}
+					}
+					case '8': return checkKeyword(0, 2, "i8", TK_I8);		
+				}
+			}
+		}
+		case 'n': return checkKeyword(1, 2, "il", TK_NIL);
+		case 'o': return checkKeyword(1, 1, "r", TK_OR);
+		case 'r': return checkKeyword(1, 5, "eturn", TK_RETURN);
+		case 's': {
+			if (scanner.current - scanner.start > 1) {
+				switch (scanner.start[1]) {
+					case 'c': return checkKeyword(2, 3, "ope", TK_SCOPE);
+					case 'w': return checkKeyword(2, 4, "itch", TK_SWITCH);
+				}
+			}
+		}
+		case 't': {
+			if (scanner.current - scanner.start > 1) {
+				switch (scanner.start[1]) {
+					case 'h': return checkKeyword(2, 2, "is", TK_THIS);
+					case 'r': return checkKeyword(2, 2, "ue", TK_TRUE);
+				}
+			}
+		}
+		case 'u': {
+			if (scanner.current - scanner.start > 1) {
+				switch (scanner.start[1]) {
+					case '1': {
+						if (scanner.current - scanner.start > 2) {
+							return checkKeyword(2, 1, "6", TK_U16);
+						}
+					}						
+					case '3': {
+						if (scanner.current - scanner.start > 2) {
+							return checkKeyword(2, 1, "2", TK_U32);
+						}
+					}
+					case '6': {
+						if (scanner.current - scanner.start > 2) {
+							return checkKeyword(2, 1, "4", TK_U64);
+						}
+					}
+					case '8': return checkKeyword(0, 2, "u8", TK_U8);
+				}
+			}			
+		}
+		case 'w': return checkKeyword(1, 4, "hile", TK_WHILE);
+		case 'S': return checkKeyword(1, 2, "tr", TK_STR);
+	}
+	return TK_IDENTIFIER;
+}
+
+Token identifier(void) {
+	while (isAlpha(peek()) || isDigit(peek())) {
+		advance();
+	}
+	return makeToken(identifierType());
+
+}
+
+Token scanToken(void) {
+
+	skipWhitespace();
+
+	scanner.start = scanner.current;
+
+	if (isAtEnd()) return makeToken(TK_EOF);
+
+	char c = advance();
 
 	if (isAlpha(c)) {
-		return scanIdentifier(sc);
+		return identifier();
 	}
 	if (isDigit(c)) {
-		return scanNumber(sc);
-	}
-	if (c == '"') {
-		advance(sc);
-		return scanString(sc);
+		return number();
 	}
 
-	next = peekNext(sc);
-	punct = registryMatchPunct(sc->reg, c, next, &punct_len);
-	if (punct != TK__NONE) {
-		for (size_t i = 0; i < punct_len; i++) {
-			advance(sc);
-		}
-		return makeToken(sc, punct);
-	}
+	switch(c) {
+		case '(': return makeToken(TK_LPAREN);
+		case ')': return makeToken(TK_RPAREN);
+		case '{': return makeToken(TK_LBRACE);
+		case '}': return makeToken(TK_RBRACE);
+		case '[': return makeToken(TK_LSQUARE);
+		case ']': return makeToken(TK_RSQUARE);
+		case ',': return makeToken(TK_COMMA);
+		case '.': return makeToken(TK_DOT);
+		case '-': return makeToken(TK_MINUS);
+		case '+': return makeToken(TK_PLUS);
+		case ';': return makeToken(TK_SEMICOLON);
+		case '/': return makeToken(TK_FSLASH);
+		case '*': return makeToken(TK_STAR);
+		case '%': return makeToken(TK_MOD);
+		case ':': return makeToken(TK_COLON);
+		case '|': return makeToken(TK_PIPE);
+		case '#': return makeToken(TK_HASH);
 
-	advance(sc);
-	return makeErrorToken(sc, "unexpected character");
+		case '!':
+			return makeToken (
+				match('=') ? TK_BANG_EQUAL : TK_BANG);
+		case '=':
+			return makeToken (
+				match('=') ? TK_EQUAL_EQUAL : TK_EQUAL);
+		case '<':
+			return makeToken (
+				match('=') ? TK_LESS_EQUAL : TK_LESS);
+		case '>':
+			return makeToken (
+				match('=') ? TK_GREATER_EQUAL : TK_GREATER);
+		case '"': 
+			return string();
+	}
+	return makeErrorToken("unexpected character");
 }
 
-Token *tokenizeAll(const char *source, Registry *reg, MemPool *pool,
-                   size_t *out_n, Token *out_err) {
-	Scanner sc;
-	Token *tokens = NULL;
-	size_t n = 0;
-	size_t cap = 0;
+char *tokenLabelLookup(TOKEN_TYPE type) {
+	return __tokenNameLiterals[type];
+}
 
-	initScanner(&sc, source, reg);
+size_t countTokens(char *source, bool *had_error) {
+	initScanner(source);
 
-	/* One pass. The old implementation scanned once to count and again to fill;
-	 * doubling the array instead costs a few copies and halves the lexing. */
-	while (true) {
-		Token token = scanToken(&sc);
+	size_t n_tok = 0;
+	*had_error = false;
 
+	while(true) {
+		Token token = scanToken();
+		n_tok++;
 		if (token.type == TK_ERROR) {
-			if (out_err) {
-				*out_err = token;
-			}
-			return NULL;
+			*had_error = true;
+			break;
 		}
-
-		if (n == cap) {
-			size_t new_cap = (cap == 0) ? 256 : cap * 2;
-			tokens = pGrowAlloc(tokens, cap * sizeof(Token), new_cap * sizeof(Token), pool);
-			cap = new_cap;
-		}
-		tokens[n++] = token;
-
 		if (token.type == TK_EOF) {
 			break;
 		}
 	}
-
-	*out_n = n;
-	return tokens;
+	return n_tok;
 }
 
-void printToken(Registry *reg, const Token *token) {
-	printf("LINE: %6zu TYPE: %16s - \"%.*s\"\n",
-	       token->line,
-	       tokenName(reg, token->type),
-	       (int)token->len, token->start);
+void __printToken(Token *token) {
+	printf("LINE: %6zu TYPE: %16s - \"%.*s\"\n", 
+		token->line,
+		tokenLabelLookup(token->type), 
+		(int)token->len, token->start);
+	return;
 }
